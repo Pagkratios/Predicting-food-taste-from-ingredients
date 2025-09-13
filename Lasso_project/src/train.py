@@ -1,0 +1,698 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Unified training + **required** plots only.
+
+What this script does now (per your specs):
+- Keeps only these plots:
+  1) Predicted vs Actual — exactly **three** plots (HS, RV, Lasso),
+     • Only the ideal line
+     • PCC and R² shown at **top-left**
+     • Legend at **bottom-right** for sensory colors (Sweet, Bitter, Salty, Umami, Sour)
+  2) A **single** RMSE box plot covering all sensory categories and methods.
+     • Y-axis = RMSE (non-negative)
+     • X-axis groups = Sweet(HS,RV,Lasso) → Bitter(HS,RV,Lasso) → Salty → Umami → Sour
+     • Method order always HS, RV, Lasso; Sensory order always Sweet, Bitter, Salty, Umami, Sour
+
+- t-SNE & Ingredient Pie: functions are included but the **calls are commented out** in main.
+
+Removed: residuals-vs-fitted, calibration, percentage-error boxplots, lasso-path plots.
+"""
+
+import os
+import pickle
+import pprint
+import importlib.util
+from collections import defaultdict
+
+
+import matplotlib.pyplot as plt
+from sklearn.manifold import TSNE
+from sklearn.model_selection import LeaveOneOut
+from sklearn.metrics import (
+    r2_score, mean_squared_error, explained_variance_score
+)
+from scipy.stats import pearsonr, spearmanr
+
+from lasso import LassoRegressor
+
+# ---------------- Config & Paths ----------------
+PROJECT_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+DATA_DIR        = os.path.join(PROJECT_ROOT, "data")
+PROC_DIR        = os.path.join(DATA_DIR, "processed")
+SRC2_RESULTS    = os.path.join(PROJECT_ROOT, "results")
+MODELS_DIR      = os.path.join(SRC2_RESULTS, "models")
+PLOTS_DIR       = os.path.join(SRC2_RESULTS, "plots")
+METRICS_DIR     = os.path.join(SRC2_RESULTS, "metrics")
+
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(PLOTS_DIR, exist_ok=True)
+os.makedirs(METRICS_DIR, exist_ok=True)
+
+RECIPE_FILE = os.path.join(DATA_DIR, "raw_recipes.py")
+PRED_FILE   = os.path.join(DATA_DIR, "data_predictions.py")
+X_FILE      = os.path.join(PROC_DIR, "X_train.npy")
+Y_FILE      = os.path.join(PROC_DIR, "Y_train.npy")
+MODEL_FILE  = os.path.join(MODELS_DIR, "final_models.pkl")
+RESULTS_CSV = os.path.join(MODELS_DIR, "real_vs_predicted.csv")
+
+# Canonical keys & colors (fixed order you requested)
+SENSORY_ORDER = ['sweet', 'bitter', 'salty', 'umami', 'sour']
+ALIASES = {
+    'sweetness': 'sweet', 'bitterness': 'bitter', 'sourness': 'sour',
+    'umaminess': 'umami', 'saltiness': 'salty',
+    'sweet': 'sweet', 'bitter': 'bitter', 'sour': 'sour', 'umami': 'umami', 'salty': 'salty'
+}
+COLOR_MAP = {'sweet': 'blue','bitter': 'orange','salty': 'red','umami': 'purple','sour': 'green'}
+METHOD_ORDER = ["HS", "RV", "Lasso"]
+
+# ---------------- Utils & Loaders ----------------
+def load_attr_from_py(filepath, variable_name):
+    spec = importlib.util.spec_from_file_location(variable_name, filepath)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return getattr(mod, variable_name)
+
+def normalize_weights(ingredients):
+    total = sum(ing['weight'] for ing in ingredients)
+    if total == 0:
+        return [{**ing, 'weight': 0.0} for ing in ingredients]
+    return [{**ing, 'weight': ing['weight'] / total} for ing in ingredients]
+
+def compute_x_vector(ingredients):
+    v = np.zeros(len(SENSORY_ORDER), dtype=float)
+    for ing in ingredients:
+        w = float(ing['weight'])
+        s = ing['sensory_scores']
+        v += w * np.array([float(s[ALIASES.get(k, k)]) for k in SENSORY_ORDER], dtype=float)
+    return v
+
+def build_X_from_raw(raw_recipes):
+    X, names = [], []
+    for r in raw_recipes:
+        ings = normalize_weights(r['ingredients'])
+        X.append(compute_x_vector(ings))
+        names.append(r['recipe_name'])
+    return np.vstack(X), names
+
+def build_Y_from_raw(raw_recipes):
+    Y = []
+    for r in raw_recipes:
+        scores = r['food_sensory_scores']
+        Y.append([float(scores[ALIASES.get(k, k)]) for k in SENSORY_ORDER])
+    return np.vstack(Y)
+
+def standardize_fit(X):
+    mean = X.mean(axis=0)
+    std  = X.std(axis=0)
+    std_safe = np.where(std == 0, 1.0, std)
+    Xs = (X - mean) / std_safe
+    return Xs, mean, std_safe
+
+def center_targets(y):
+    y_mean = y.mean()
+    return y - y_mean, y_mean
+
+def normalize_attr_dict(d):
+    out = {}
+    for k, v in d.items():
+        ck = ALIASES.get(k)
+        if ck in SENSORY_ORDER:
+            out[ck] = float(v)
+    return out
+
+def extract_from_pred_data(pred_data, method_key):
+    preds, actuals, labels = [], [], []
+    for _, entry in pred_data.items():
+        if not isinstance(entry, dict) or 'Actual' not in entry or method_key not in entry:
+            continue
+        act = normalize_attr_dict(entry['Actual'])
+        prd = normalize_attr_dict(entry[method_key])
+        for k in SENSORY_ORDER:
+            if k in act and k in prd:
+                preds.append(prd[k]); actuals.append(act[k]); labels.append(k)
+    return preds, actuals, labels
+
+# ---------------- Optional (kept but calls commented out) ----------------
+def plot_ingredient_usage_pie(raw_recipes, output_dir):
+    counts = defaultdict(int)
+    for r in raw_recipes:
+        seen = set()
+        for ing in r["ingredients"]:
+            name = ing["name"]
+            if name not in seen:
+                counts[name] += 1
+                seen.add(name)
+    total = len(raw_recipes)
+    threshold = 3
+    major = [(n, c) for n, c in counts.items() if c >= threshold]
+    other_count = sum(c for c in counts.values() if c < threshold)
+    major.sort(key=lambda x: x[1], reverse=True)
+
+    labels = [n for n, _ in major]
+    sizes_raw = [c for _, c in major]
+    if other_count > 0:
+        labels.append("Other")
+        sizes_raw.append(other_count)
+    sizes = [100 * c / total for c in sizes_raw]
+
+    plt.figure(figsize=(7, 7))
+    plt.pie(
+        sizes, labels=[str(l) for l in labels], autopct="%1.1f%%", startangle=90, counterclock=False,
+        wedgeprops={"edgecolor": "white", "linewidth": 1},
+        textprops={"fontsize": 8}, labeldistance=0.9, pctdistance=0.5
+    )
+    plt.title(f"Ingredient Usage (≥{threshold} recipes)")
+    plt.axis("equal")
+    plt.tight_layout()
+    path = os.path.join(output_dir, "ingredient_usage.png")
+    plt.savefig(path, bbox_inches="tight", pad_inches=0.05, dpi=300)
+    plt.close()
+
+
+def plot_tsne(raw_recipes, output_dir, annotate=True, perplexity=5):
+    X = np.array([compute_x_vector(normalize_weights(r['ingredients'])) for r in raw_recipes])
+    names = [r['recipe_name'] for r in raw_recipes]
+    tsne = TSNE(n_components=2, perplexity=perplexity, random_state=42)
+    X_2d = tsne.fit_transform(X)
+
+    plt.figure(figsize=(8.5, 7))
+    plt.scatter(X_2d[:, 0], X_2d[:, 1], s=60, alpha=0.85, edgecolors='k', linewidths=0.8)
+    if annotate:
+        for i, name in enumerate(names):
+            plt.annotate(name, (X_2d[i, 0], X_2d[i, 1]),
+                         fontsize=7, alpha=0.7, textcoords="offset points", xytext=(5, 3))
+    plt.title("t-SNE of Recipe Vectors")
+    plt.xlabel("t-SNE Dim 1"); plt.ylabel("t-SNE Dim 2")
+    plt.grid(True, linestyle='--', alpha=0.35)
+    plt.tight_layout()
+    path = os.path.join(output_dir, "tsne_recipes.png")
+    plt.savefig(path, bbox_inches="tight", pad_inches=0.05, dpi=300)
+    plt.close()
+
+# ---------------- Required Plots ----------------
+def _sensory_legend_handles():
+    handles = []
+    for k in SENSORY_ORDER:
+        h = plt.Line2D([0],[0], marker='o', linestyle='', markersize=6, label=k.capitalize(), color=COLOR_MAP[k])
+        handles.append(h)
+    return handles
+
+def plot_predicted_vs_actual(preds, actuals, labels, method_name, output_file):
+    if not preds or not actuals:
+        print(f"[!] No data to plot for {method_name}.")
+        return
+
+    # Convert to arrays and clip to [0, 100] to avoid axis blowouts
+    p = np.clip(np.asarray(preds, float), 0, 100)
+    a = np.clip(np.asarray(actuals, float), 0, 100)
+
+    r_value, _ = pearsonr(p, a) if len(p) >= 2 else (np.nan, None)
+    r_squared = r2_score(a, p) if len(p) >= 2 else np.nan
+
+    plt.figure(figsize=(6.8, 6.6))
+    colors = [COLOR_MAP[lbl] for lbl in labels]
+    plt.scatter(p, a, c=colors, alpha=0.85, s=30, linewidths=0)
+
+    # Ideal line
+    mn = float(min(np.min(p), np.min(a)))
+    mx = float(max(np.max(p), np.max(a)))
+    pad = (mx - mn) * 0.05 if mx > mn else 0.1
+    plt.plot([mn - pad, mx + pad], [mn - pad, mx + pad], 'k--', linewidth=1, label='Ideal')
+
+    # Text at top-left
+    txt = f"PCC = {r_value:.2f}\n$R^2$ = {r_squared:.2f}"
+    plt.gca().text(
+        0.02, 0.98, txt, transform=plt.gca().transAxes,
+        va='top', ha='left', fontsize=11,
+        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray')
+    )
+
+    # Legend bottom-right
+    handles = _sensory_legend_handles()
+    plt.legend(
+        handles=handles + [plt.Line2D([0],[0], color='k', linestyle='--', label='Ideal')],
+        loc='lower right', fontsize=9, frameon=True
+    )
+
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.title(f"{method_name}: Predicted vs Actual")
+    plt.grid(True, linestyle='--', alpha=0.35)
+    plt.tight_layout()
+    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.05, dpi=300)
+    plt.close()
+    print(f"[✓] Saved: {output_file} | PCC={r_value:.3f}, R²={r_squared:.3f}")
+
+def plot_rmse_boxplot(hs, rv, lasso, out_path):
+    """
+    Publication-style grouped RMSE box plot.
+    X-axis shows HS, RV, Lasso for each sensory group, but the sensory label is
+    shown **once**, centered under the trio, e.g.:
+
+        HS    RV    Lasso
+              Sweet
+
+    Order: Sweet → Bitter → Salty → Umami → Sour. Method order fixed: HS, RV, Lasso.
+    Y-axis = RMSE (non-negative). Grid preserved.
+    """
+    # Unpack
+    (hs_p, hs_a, hs_l) = hs
+    (rv_p, rv_a, rv_l) = rv
+    (ls_p, ls_a, ls_l) = lasso
+
+    def abs_errors(preds, actuals, labels):
+        p = np.asarray(preds, float)
+        a = np.asarray(actuals, float)
+        labs = np.asarray(labels)
+        return {k: np.abs(p[labs == k] - a[labs == k]) for k in SENSORY_ORDER}
+
+    hs_err = abs_errors(hs_p, hs_a, hs_l)
+    rv_err = abs_errors(rv_p, rv_a, rv_l)
+    ls_err = abs_errors(ls_p, ls_a, ls_l)
+
+    # Prepare data & labels
+    data = []
+    tick_labels = []
+    for sens in SENSORY_ORDER:
+        data.extend([
+            hs_err.get(sens, np.array([])),
+            rv_err.get(sens, np.array([])),
+            ls_err.get(sens, np.array([]))
+        ])
+        tick_labels.extend([
+            "HS\n",                     # left box
+            f"RV\n{sens.capitalize()}", # center box with sensory label
+            "Lasso\n"                   # right box
+        ])
+
+    plt.figure(figsize=(14, 6))
+    bp = plt.boxplot(data, patch_artist=True, widths=0.6, showfliers=False)
+
+    method_colors = ['#9ecae1', '#a1d99b', '#fdae6b']  # HS, RV, Lasso
+    for i, box in enumerate(bp['boxes']):
+        box.set_facecolor(method_colors[i % 3])
+        box.set_alpha(0.95)
+        box.set_edgecolor('black')
+
+    for median in bp['medians']:
+        median.set_linewidth(1.5)
+        median.set_color('black')
+
+    plt.ylabel("RMSE")
+    plt.title("Ingredient to taste (RMSE vs Method")
+    positions = np.arange(1, len(tick_labels) + 1)
+    plt.xticks(ticks=positions, labels=tick_labels)
+    plt.grid(True, axis='y', linestyle='--', alpha=0.35)
+
+    handles = [
+        plt.Line2D([0],[0], marker='s', linestyle='', markersize=10, color=method_colors[0], label='HS'),
+        plt.Line2D([0],[0], marker='s', linestyle='', markersize=10, color=method_colors[1], label='RV'),
+        plt.Line2D([0],[0], marker='s', linestyle='', markersize=10, color=method_colors[2], label='Lasso'),
+    ]
+    plt.legend(handles=handles, loc='upper right', frameon=True)
+
+    plt.tight_layout()
+    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.05, dpi=300)
+    plt.close()
+    print(f"[✓] Saved RMSE box plot: {out_path}")
+
+# ---------------- Metrics (kept for completeness) ----------------
+def _safe_mape(a, p, eps=1e-8):
+    a = np.asarray(a, float); p = np.asarray(p, float)
+    denom = np.where(np.abs(a) < eps, eps, np.abs(a))
+    return np.mean(np.abs((a - p) / denom)) * 100.0
+
+
+def _smape(a, p, eps=1e-8):
+    a = np.asarray(a, float); p = np.asarray(p, float)
+    denom = np.maximum(eps, (np.abs(a) + np.abs(p)) / 2.0)
+    return np.mean(np.abs(a - p) / denom) * 100.0
+
+
+def compute_metrics(preds, actuals):
+    a = np.asarray(actuals, float); p = np.asarray(preds, float)
+    err = p - a
+    mae = np.mean(np.abs(err))
+    medae = np.median(np.abs(err))
+    mse = np.mean(err ** 2)
+    rmse = np.sqrt(mse)
+    r2 = r2_score(a, p) if len(a) >= 2 else np.nan
+    evs = explained_variance_score(a, p) if len(a) >= 2 else np.nan
+    pr, _ = pearsonr(p, a) if len(a) >= 2 else (np.nan, None)
+    sr, _ = spearmanr(p, a) if len(a) >= 2 else (np.nan, None)
+    bias = np.mean(err)
+    sderr = np.std(err, ddof=1) if len(err) > 1 else np.nan
+    mape = _safe_mape(a, p)
+    smape = _smape(a, p)
+    return {
+        "MAE": mae, "Median_AE": medae, "MSE": mse, "RMSE": rmse,
+        "R2": r2, "ExplainedVar": evs,
+        "Pearson_r": pr, "Spearman_rho": sr,
+        "Bias": bias, "Std_Error": sderr,
+        "MAPE_%": mape, "sMAPE_%": smape
+    }
+
+
+def evaluate_and_save(method_name, preds, actuals, labels, out_dir):
+    df_rows = []
+    preds = np.asarray(preds, float)
+    actuals = np.asarray(actuals, float)
+    labels = np.asarray(labels)
+
+    for key in SENSORY_ORDER:
+        mask = (labels == key)
+        if not np.any(mask):
+            continue
+        m = compute_metrics(preds[mask], actuals[mask])
+        m["method"] = method_name
+        m["target"] = key
+        df_rows.append(m)
+
+    m_overall = compute_metrics(preds, actuals)
+    m_overall["method"] = method_name
+    m_overall["target"] = "overall"
+    df_rows.append(m_overall)
+
+    df = pd.DataFrame(df_rows)
+    order = ["method", "target", "MAE", "Median_AE", "MSE", "RMSE",
+             "R2", "ExplainedVar", "Pearson_r", "Spearman_rho",
+             "Bias", "Std_Error", "MAPE_%", "sMAPE_%"]
+    df = df[order]
+    path = os.path.join(out_dir, f"{method_name.lower()}_metrics.csv")
+    df.to_csv(path, index=False)
+    print(f"[✓] Metrics saved: {path}")
+    return df
+
+
+def save_combined_tables(dfs, out_dir):
+    all_df = pd.concat(dfs, ignore_index=True)
+    long_path = os.path.join(out_dir, "all_metrics_long.csv")
+    all_df.to_csv(long_path, index=False)
+
+    wide = (all_df.set_index(["target", "method"]).sort_index())
+    tables = []
+    for metric in ["MAE","Median_AE","MSE","RMSE","R2","ExplainedVar",
+                   "Pearson_r","Spearman_rho","Bias","Std_Error","MAPE_%","sMAPE_%"]:
+        sub = (wide[[metric]].reset_index().pivot(index="target", columns="method", values=metric)
+               .reindex(SENSORY_ORDER + ["overall"]))
+        sub.insert(0, "Metric", metric)
+        tables.append(sub.reset_index(names="target"))
+    wide_out = pd.concat(tables, ignore_index=True)
+    wide_csv = os.path.join(out_dir, "all_metrics_wide.csv")
+    wide_out.to_csv(wide_csv, index=False)
+
+    md_path = os.path.join(out_dir, "all_metrics.md")
+    with open(md_path, "w") as f:
+        f.write(wide_out.to_markdown(index=False))
+    tex_path = os.path.join(out_dir, "all_metrics.tex")
+    with open(tex_path, "w") as f:
+        f.write(wide_out.to_latex(index=False, float_format="%.3f"))
+
+    print(f"[✓] Combined tables saved:\n  - {wide_csv}\n  - {md_path}\n  - {tex_path}")
+
+# ---------------- Alpha tuning & training ----------------
+def tune_best_alphas(X_std, Y, alphas):
+    best_alphas = {}
+    loo = LeaveOneOut()
+    for i, key in enumerate(SENSORY_ORDER):
+        print(f"\n[INFO] Tuning α for '{key}'")
+        y = Y[:, i]
+        y_centered, _ = center_targets(y)
+        avg_errors = []
+        for alpha in alphas:
+            fold_errors = []
+            for tr, te in loo.split(X_std):
+                model = LassoRegressor(alpha=alpha, learning_rate=0.01, max_iter=1000, tol=1e-6, verbose=False)
+                model.fit(X_std[tr], y_centered[tr])
+                y_pred = model.predict(X_std[te]) + y[tr].mean()
+                fold_errors.append(mean_squared_error(y[te], y_pred))
+            avg_errors.append(np.mean(fold_errors))
+            print(f"  α={alpha:.5f} → MSE={avg_errors[-1]:.4f}")
+        best = alphas[np.argmin(avg_errors)]
+        best_alphas[key] = best
+        print(f"[✓] Selected alpha for '{key}': {best:.5f}")
+    return best_alphas
+
+def train_final_models(X, Y, best_alphas):
+    models = {}
+    inmem_preds, inmem_actuals, inmem_labels = [], [], []
+
+    for i, key in enumerate(SENSORY_ORDER):
+        y = Y[:, i]  # raw targets in original range
+        alpha = best_alphas[key]
+        print(f"\n[INFO] Training final model for '{key}' with α={alpha:.5f}")
+        m = LassoRegressor(alpha=alpha, learning_rate=0.01, max_iter=1000, tol=1e-6, verbose=False)
+        m.fit(X, y)  # train on raw features and raw targets
+        y_pred_raw = m.predict(X)
+        inmem_preds.extend(y_pred_raw.tolist())
+        inmem_actuals.extend(y.tolist())
+        inmem_labels.extend([key] * len(y))
+        models[key] = m
+        print(f"  → Coefficients: {m.get_coefficients().round(3)}")
+        print(f"  → Intercept: {m.get_intercept():.3f}")
+
+    return models, np.array(inmem_preds), np.array(inmem_actuals), inmem_labels
+
+# ---------------- Preds export (optional parity) ----------------
+def update_data_predictions_from_matrix(recipes, pred_matrix, pred_file_path):
+    """
+    Writes Lasso predictions back into data_predictions.py for each recipe,
+    using a (n_recipes x len(SENSORY_ORDER)) matrix that aligns with recipe order.
+    """
+    with open(pred_file_path, 'r') as f:
+        content = f.read()
+        global_dict = {}
+        exec(content, global_dict)
+        pred_data = global_dict.get('pred_data', {})
+
+    for i, r in enumerate(recipes):
+        name = r['recipe_name']
+        if name not in pred_data:
+            pred_data[name] = {}
+        if 'Lasso prediction' not in pred_data[name]:
+            pred_data[name]['Lasso prediction'] = {}
+        for j, key in enumerate(SENSORY_ORDER):
+            pred_data[name]['Lasso prediction'][key] = float(round(pred_matrix[i, j], 2))
+
+    with open(pred_file_path, 'w') as f:
+        f.write("pred_data = ")
+        f.write(pprint.pformat(pred_data, indent=4, width=120))
+        f.write("\n")
+    print(f"[✓] Lasso predictions updated in: {pred_file_path}")
+
+import json
+import math
+import numpy as np
+import pandas as pd  # (only needed if you still want to build a df elsewhere)
+
+def predict_recipes_table(
+    models,
+    X,
+    recipe_names,
+    raw_recipes,
+    out_json,
+    round_ndigits=2,
+    include_diff=True,
+):
+    """
+    Creates a JSON list with one object per recipe:
+      {
+        "recipe_name": "<name>",
+        "pred":   {"sweet": ..., "bitter": ..., "salty": ..., "umami": ..., "sour": ...},
+        "actual": {"sweet": ..., "bitter": ..., "salty": ..., "umami": ..., "sour": ...},
+        "diff":   {"sweet": pred-actual, ...}   # optional
+      }
+
+    - Predictions are taken from `models` applied to X (aligned via `recipe_names`).
+    - Actuals are read DIRECTLY from raw_recipes[*]['food_sensory_scores'] using ALIASES/SENSORY_ORDER.
+    - Results are saved as pretty JSON to `out_json`.
+    - Returns the in-memory Python list.
+    """
+
+    # --- helpers ---
+    def _safe_round(x):
+        if x is None:
+            return None
+        try:
+            xf = float(x)
+            if math.isnan(xf):
+                return None
+            return round(xf, round_ndigits)
+        except Exception:
+            return None
+
+    # Build fast lookup: recipe_name -> row index in X
+    name_to_idx = {nm: i for i, nm in enumerate(recipe_names)}
+
+    # Precompute predictions per sensory target for all rows
+    # preds_by_target[key] is a vector aligned to recipe_names
+    preds_by_target = {}
+    for key in SENSORY_ORDER:
+        m = models[key]
+        preds_by_target[key] = np.asarray(m.predict(X), dtype=float)
+
+    # Build actuals from raw_recipes, normalized to canonical keys
+    raw_actuals = {}
+    for r in raw_recipes:
+        nm = r.get("recipe_name")
+        scores = r.get("food_sensory_scores", {})
+        canon = normalize_attr_dict(scores)  # uses your ALIASES/SENSORY_ORDER
+        raw_actuals[nm] = canon
+
+    # Assemble rows in the order of raw_recipes (easy to eyeball)
+    rows = []
+    missing_in_X = []
+    missing_actuals = []
+
+    for r in raw_recipes:
+        nm = r.get("recipe_name")
+
+        # predicted: only if the recipe exists in X/recipe_names
+        if nm not in name_to_idx:
+            missing_in_X.append(nm)
+            # still output a row with actuals if available
+            pred_dict = {k: None for k in SENSORY_ORDER}
+        else:
+            i = name_to_idx[nm]
+            pred_dict = {k: _safe_round(preds_by_target[k][i]) for k in SENSORY_ORDER}
+
+        # actuals: directly from raw_recipes (normalized)
+        act_dict_raw = raw_actuals.get(nm, {})
+        act_dict = {k: _safe_round(act_dict_raw.get(k, None)) for k in SENSORY_ORDER}
+        if not act_dict_raw:
+            missing_actuals.append(nm)
+
+        # optional diffs
+        diff_dict = None
+        if include_diff:
+            diff_dict = {}
+            for k in SENSORY_ORDER:
+                pv = pred_dict[k]
+                av = act_dict[k]
+                diff_dict[k] = None if pv is None or av is None else _safe_round(pv - av)
+
+        row = {
+            "recipe_name": nm,
+            "pred": pred_dict,
+            "actual": act_dict,
+        }
+        if include_diff:
+            row["diff"] = diff_dict
+
+        rows.append(row)
+
+    # Log small diagnostics (won't affect JSON)
+    if missing_in_X:
+        print(f"[!] {len(missing_in_X)} recipe(s) from raw_recipes not found in recipe_names/X, preds set to None. Example(s): {missing_in_X[:5]}{' ...' if len(missing_in_X) > 5 else ''}")
+    if missing_actuals:
+        print(f"[!] {len(missing_actuals)} recipe(s) missing actual food_sensory_scores in raw_recipes. Example(s): {missing_actuals[:5]}{' ...' if len(missing_actuals) > 5 else ''}")
+
+    # Save pretty JSON (easy to read)
+    with open(out_json, "w", encoding="utf-8") as f:
+        json.dump(rows, f, indent=2, ensure_ascii=False)
+    print(f"[✓] Saved per-recipe predictions JSON → {out_json}")
+
+    return rows
+
+
+# ---------------- Main ----------------
+def main():
+    print("[*] Loading processed data and raw assets...")
+    X = np.load(X_FILE)
+    Y = np.load(Y_FILE)
+    raw_recipes = load_attr_from_py(RECIPE_FILE, 'raw_recipes')
+    pred_data   = load_attr_from_py(PRED_FILE,   'pred_data')
+
+    # Optional data-only plots (kept, but calls disabled per request)
+    # plot_ingredient_usage_pie(raw_recipes, PLOTS_DIR)
+    # plot_tsne(raw_recipes, PLOTS_DIR, annotate=True)
+
+    print("[*] Standardizing X for alpha tuning...")
+    X_std, x_mean, x_scale = standardize_fit(X)
+    np.save(os.path.join(PROC_DIR, "x_scaler_mean.npy"), x_mean)
+    np.save(os.path.join(PROC_DIR, "x_scaler_scale.npy"), x_scale)
+
+    # α tuning
+    print("[*] Tuning alpha via LOO...")
+    alphas = np.logspace(-4, 0.5, 30)
+    best_alphas = tune_best_alphas(X_std, Y, alphas)
+
+    # Train final models on **raw X** so predictions match HS/RV scale
+    print("[*] Training final models...")
+    models, lasso_preds_all, lasso_actuals_all, lasso_labels_all = train_final_models(X, Y, best_alphas)
+
+    # Save models
+    with open(MODEL_FILE, 'wb') as f:
+        pickle.dump(models, f)
+    print(f"[✓] Models saved to: {MODEL_FILE}")
+
+    # ---- Per-recipe wide prediction table (pred_* [+ actual_*]) ----
+    recipe_names = [r['recipe_name'] for r in raw_recipes]  # same order as X/Y generation
+    OUT_JSON = os.path.join(MODELS_DIR, "per_recipe_lasso_predictions.json")
+
+    _ = predict_recipes_table(
+        models=models,
+        X=X,
+        recipe_names=recipe_names,
+        raw_recipes=raw_recipes,
+        out_json=OUT_JSON,
+    )
+
+    # Also keep the long/flattened CSV for compatibility
+    results_df = pd.DataFrame({
+        'label': lasso_labels_all,
+        'actual': lasso_actuals_all,
+        'predicted': lasso_preds_all
+    })
+    results_df.to_csv(RESULTS_CSV, index=False)
+    print(f"[✓] Long-format predictions saved to: {RESULTS_CSV}")
+
+    # --- HS & RV from pred_data ---
+    hs_preds, hs_actuals, hs_labels = extract_from_pred_data(pred_data, "HS prediction")
+    rv_preds, rv_actuals, rv_labels = extract_from_pred_data(pred_data, "RV prediction")
+
+    # --- Predicted vs Actual plots ---
+    plot_predicted_vs_actual(
+        hs_preds, hs_actuals, hs_labels,
+        method_name="HS",
+        output_file=os.path.join(PLOTS_DIR, "hs_predicted_vs_actual.png")
+    )
+
+    plot_predicted_vs_actual(
+        rv_preds, rv_actuals, rv_labels,
+        method_name="RV",
+        output_file=os.path.join(PLOTS_DIR, "rv_predicted_vs_actual.png")
+    )
+
+    plot_predicted_vs_actual(
+        lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all,
+        method_name="Lasso",
+        output_file=os.path.join(PLOTS_DIR, "lasso_predicted_vs_actual.png")
+    )
+
+    # --- Single RMSE box plot ---
+    plot_rmse_boxplot(
+        hs=(hs_preds, hs_actuals, hs_labels),
+        rv=(rv_preds, rv_actuals, rv_labels),
+        lasso=(lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all),
+        out_path=os.path.join(PLOTS_DIR, "rmse_boxplot_all_methods.png")
+    )
+
+    # --- Metrics ---
+    dfs = []
+    dfs.append(evaluate_and_save("HS", hs_preds, hs_actuals, hs_labels, METRICS_DIR))
+    dfs.append(evaluate_and_save("RV", rv_preds, rv_actuals, rv_labels, METRICS_DIR))
+    dfs.append(evaluate_and_save("Lasso", lasso_preds_all, lasso_actuals_all, lasso_labels_all, METRICS_DIR))
+    save_combined_tables(dfs, METRICS_DIR)
+
+    # --- Write Lasso predictions back to data_predictions.py (matrix-aligned) ---
+    print("[*] Updating data_predictions.py with Lasso predictions...")
+
+
+    print("[✓] Done.")
+
+
+if __name__ == "__main__":
+    main()
+
