@@ -28,7 +28,7 @@ from scipy.stats import norm, gaussian_kde
 # ---------------- Paths & constants ----------------
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 DATA_DIR     = os.path.join(PROJECT_ROOT, "data")
-PLOTS_DIR    = os.path.join(PROJECT_ROOT, "src_2", "results", "plots_data")
+PLOTS_DIR    = os.path.join(PROJECT_ROOT, "gaussian_data", "plots_data")
 RAW_FILE     = os.path.join(DATA_DIR, "raw_recipes.py")
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
@@ -711,7 +711,7 @@ def pca_clusters_minimal(
     raw_recipes,
     n_components=2,
     standardize=False,
-    outdir="src_2/plot_pca",
+    outdir="results/plot_pca",
     k_min=2,
     k_max=12,
     seed=42
