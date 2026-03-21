@@ -40,9 +40,9 @@ DATA_DIR     = os.path.join(PROJECT_ROOT, "data")
 RAW_FILE     = get_raw_recipes_path()
 
 # New styled outputs under Lasso_project/results/
-PLOTS_DIR    = os.path.join(PROJECT_ROOT, "results", "plots_data")
-TSNE_DIR     = os.path.join(PROJECT_ROOT, "results", "t-sne")
-PCA_DIR      = os.path.join(PROJECT_ROOT, "results", "pca")
+PLOTS_DIR    = os.path.join(PROJECT_ROOT, os.pardir, "results", "plots_data")
+TSNE_DIR     = os.path.join(PROJECT_ROOT, os.pardir, "results", "t-sne")
+PCA_DIR      = os.path.join(PROJECT_ROOT, os.pardir, "results", "pca")
 
 for _d in (PLOTS_DIR, TSNE_DIR, PCA_DIR):
     os.makedirs(_d, exist_ok=True)

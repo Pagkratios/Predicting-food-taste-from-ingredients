@@ -12,5 +12,4 @@ __pycache__/
 .DS_Store
 
 # Generated outputs (regenerable by running scripts)
-Lasso_project/results/
-Lasso_project/data/processed/
+Lasso/data/processed/
