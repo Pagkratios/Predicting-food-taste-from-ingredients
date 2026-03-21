@@ -5,32 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FlavorLab — AI Sensory Prediction</title>
 
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-
-  <!-- Styles -->
   <link rel="stylesheet" href="/static/style.css" />
 </head>
-
 <body>
+
+<!-- ══════════════════════════════════════ NAV ════════════════════════════ -->
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <div class="nav-logo">
+      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+    </div>
+    FlavorLab
+  </a>
+  <span class="nav-tag">Lasso · Claude AI</span>
+</nav>
 
 <!-- ══════════════════════════════════════ HERO ═══════════════════════════ -->
 <header class="hero">
-  <div class="hero-eyebrow"><span>AI · Sensory Science · Lasso Regression</span></div>
+  <div class="hero-eyebrow">AI · Sensory Science · Lasso Regression</div>
 
-  <h1 class="display-font">
-    Predict the Taste<br>
-    <em>of Any Recipe</em>
-  </h1>
+  <h1>Predict the Taste<br>of <em>Any Recipe</em></h1>
 
   <p class="hero-sub">
-    Paste a recipe, upload a document, or link to a recipe URL —
-    Claude extracts the ingredients and our Lasso model computes the five sensory dimensions.
+    Paste a recipe, upload a document, or link to a URL —
+    Claude extracts the ingredients and our Lasso model predicts the five sensory dimensions.
   </p>
 
   <div class="flavour-dots" aria-hidden="true">
@@ -43,37 +46,36 @@
 </header>
 
 <!-- ════════════════════════════════════════ MAIN ═════════════════════════ -->
-<main class="container">
+<main>
+  <div class="container" id="mainContainer">
 
-  <!-- Error banner -->
-  <div class="error-banner" id="errorBanner" role="alert">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="errorMsg"></span>
-  </div>
-
-  <!-- ── Input card ──────────────────────────────────────────────────── -->
-  <div class="input-card">
-
-    <!-- Tabs -->
-    <div class="tabs" role="tablist">
-      <button class="tab-btn active" data-tab="text" role="tab">
-        <svg style="display:inline;vertical-align:-3px;width:13px;height:13px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        Paste Recipe
-      </button>
-      <button class="tab-btn" data-tab="url" role="tab">
-        <svg style="display:inline;vertical-align:-3px;width:13px;height:13px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-        Recipe URL
-      </button>
-      <button class="tab-btn" data-tab="upload" role="tab">
-        <svg style="display:inline;vertical-align:-3px;width:13px;height:13px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        Upload Document
-      </button>
+    <!-- Error banner -->
+    <div class="error-banner" id="errorBanner" role="alert">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span id="errorMsg"></span>
     </div>
 
-    <!-- Pane: text -->
-    <div class="tab-pane active" id="pane-text" role="tabpanel">
-      <textarea id="recipeText" class="recipe-textarea"
-        placeholder="Describe your recipe — list ingredients with amounts or proportions.
+    <!-- ── Input card ─────────────────────────────────────────────────── -->
+    <div class="input-card" id="inputCard">
+
+      <div class="tabs" role="tablist">
+        <button class="tab-btn active" data-tab="text" role="tab">
+          <svg style="display:inline;vertical-align:-3px;width:12px;height:12px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          Paste Recipe
+        </button>
+        <button class="tab-btn" data-tab="url" role="tab">
+          <svg style="display:inline;vertical-align:-3px;width:12px;height:12px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Recipe URL
+        </button>
+        <button class="tab-btn" data-tab="upload" role="tab">
+          <svg style="display:inline;vertical-align:-3px;width:12px;height:12px;stroke:currentColor;fill:none;margin-right:5px" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload File
+        </button>
+      </div>
+
+      <div class="tab-pane active" id="pane-text" role="tabpanel">
+        <textarea id="recipeText" class="recipe-textarea"
+          placeholder="Describe your recipe — list ingredients with amounts or proportions.
 
 Example:
   Bread and butter sandwich
@@ -81,139 +83,143 @@ Example:
   - Unsalted butter (25 g)
 
 Sensory scores are looked up automatically from our database."
-        aria-label="Recipe description"></textarea>
-      <p style="font-size:12px;color:var(--text-dim);margin-top:8px">
-        Tip: press <kbd>⌘ Enter</kbd> to analyse
-      </p>
-    </div>
-
-    <!-- Pane: URL -->
-    <div class="tab-pane" id="pane-url" role="tabpanel">
-      <div class="url-input-wrap">
-        <input type="url" id="recipeUrl" class="url-input"
-          placeholder="https://www.example.com/recipes/chocolate-cake"
-          aria-label="Recipe URL" />
-        <div class="url-hint">
-          <strong>Note:</strong> The linked page must include ingredient names and weights or proportions.
-          Sensory scores are looked up automatically from our scientific database — no scores needed in your input.
-        </div>
+          aria-label="Recipe description"></textarea>
+        <p style="font-size:12px;color:var(--text-dim);margin-top:8px">
+          Tip: press <kbd>⌘ Enter</kbd> to analyse
+        </p>
       </div>
-    </div>
 
-    <!-- Pane: upload -->
-    <div class="tab-pane" id="pane-upload" role="tabpanel">
-      <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" accept=".txt,.pdf,.docx" aria-label="Upload recipe file" />
-        <div class="drop-icon">
-          <svg viewBox="0 0 24 24" stroke-width="1.5">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="17 8 12 3 7 8"/>
-            <line x1="12" y1="3" x2="12" y2="15"/>
-          </svg>
-        </div>
-        <h3>Drop your recipe file here</h3>
-        <p>or click to browse &nbsp;·&nbsp; PDF, TXT, DOCX</p>
-        <div class="file-badge" id="fileBadge" style="display:none">
-          <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span id="fileBadgeName"></span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Submit -->
-    <button class="predict-btn" id="predictBtn" type="button">
-      <svg class="btn-icon" viewBox="0 0 24 24" stroke-width="2">
-        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
-      </svg>
-      Analyse Flavour Profile
-    </button>
-  </div>
-
-  <!-- ── Loading ──────────────────────────────────────────────────────── -->
-  <div class="loading-overlay" id="loadingOverlay" aria-live="polite">
-    <div class="spinner-ring" aria-hidden="true"></div>
-    <p>Analysing your recipe…</p>
-    <ul class="loading-steps">
-      <li><span class="step-dot"></span>Sending input to Claude AI</li>
-      <li><span class="step-dot"></span>Extracting structured ingredients</li>
-      <li><span class="step-dot"></span>Looking up sensory database</li>
-      <li><span class="step-dot"></span>Researching unknown ingredients</li>
-      <li><span class="step-dot"></span>Running Lasso models</li>
-      <li><span class="step-dot"></span>Finding dish image &amp; description</li>
-    </ul>
-  </div>
-
-  <!-- ════════════════════════════════════ RESULTS ═══════════════════════ -->
-  <section class="results-section" id="resultsSection" aria-label="Prediction results">
-
-    <!-- 0. Warning -->
-    <div class="estimate-banner" id="estimateBanner" style="display:none">
-      <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span id="estimateBannerMsg"></span>
-    </div>
-
-    <!-- 1. Dish info (image + description) -->
-    <div class="result-card" id="dishInfoCard" style="display:none">
-      <div class="section-label">Dish Overview</div>
-      <div class="dish-info-card">
-        <div class="dish-image-wrap" id="dishImageWrap">
-          <div class="dish-placeholder">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-            <span>No image found</span>
+      <div class="tab-pane" id="pane-url" role="tabpanel">
+        <div class="url-input-wrap">
+          <input type="url" id="recipeUrl" class="url-input"
+            placeholder="https://www.example.com/recipes/chocolate-cake"
+            aria-label="Recipe URL" />
+          <div class="url-hint">
+            <strong>Note:</strong> The linked page must include ingredient names and weights or proportions.
+            Sensory scores are looked up automatically from our scientific database.
           </div>
         </div>
-        <div class="dish-text">
-          <h3 id="dishName"></h3>
-          <p class="dish-description" id="dishDescription"></p>
-        </div>
       </div>
-    </div>
 
-    <!-- 2. Extracted recipe table -->
-    <div class="result-card">
-      <div class="section-label">Extracted Recipe</div>
-      <h2 class="display-font">Ingredients</h2>
-      <div class="recipe-name-badge" id="recipeName"></div>
-      <div style="overflow-x:auto">
-        <table class="data-table" aria-label="Ingredient breakdown">
-          <thead>
-            <tr>
-              <th>Ingredient</th>
-              <th>Weight</th>
-              <th>Source</th>
-              <th>Confidence</th>
-              <th>Evidence</th>
-              <th>Sensory profile</th>
-            </tr>
-          </thead>
-          <tbody id="ingredientTbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- 3+4. Radar + Scores -->
-    <div class="results-row">
-      <div class="result-card">
-        <div class="section-label">Flavour Profile</div>
-        <h2 class="display-font">Radar</h2>
-        <div class="chart-canvas-wrap">
-          <canvas id="radarCanvas" width="420" height="420" aria-label="Radar chart of predicted sensory scores"></canvas>
+      <div class="tab-pane" id="pane-upload" role="tabpanel">
+        <div class="drop-zone" id="dropZone">
+          <input type="file" id="fileInput" accept=".txt,.pdf,.docx" aria-label="Upload recipe file" />
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <h3>Drop your recipe file here</h3>
+          <p>or click to browse &nbsp;·&nbsp; PDF, TXT, DOCX</p>
+          <div class="file-badge" id="fileBadge" style="display:none">
+            <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span id="fileBadgeName"></span>
+          </div>
         </div>
       </div>
 
-      <div class="result-card">
-        <div class="section-label">Predicted Scores</div>
-        <h2 class="display-font">Sensory Breakdown</h2>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px;display:flex;gap:16px;flex-wrap:wrap">
-          <span>Score <span style="color:var(--text-muted)">/&nbsp;100</span></span>
-          <span style="border-left:1px solid var(--border);padding-left:16px">Range = predicted ± RMSE</span>
-        </div>
-        <div id="scoresContainer"></div>
-      </div>
+      <button class="predict-btn" id="predictBtn" type="button">
+        <svg class="btn-icon" viewBox="0 0 24 24" stroke-width="2">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+        </svg>
+        Analyse Flavour Profile
+      </button>
     </div>
 
-  </section>
+    <!-- ── Loading ────────────────────────────────────────────────────── -->
+    <div class="loading-overlay" id="loadingOverlay" aria-live="polite">
+      <div class="spinner-ring" aria-hidden="true"></div>
+      <p>Analysing your recipe…</p>
+      <ul class="loading-steps">
+        <li><span class="step-dot"></span>Sending input to Claude AI</li>
+        <li><span class="step-dot"></span>Extracting structured ingredients</li>
+        <li><span class="step-dot"></span>Looking up sensory database</li>
+        <li><span class="step-dot"></span>Researching unknown ingredients</li>
+        <li><span class="step-dot"></span>Running Lasso models</li>
+        <li><span class="step-dot"></span>Finding dish image &amp; description</li>
+      </ul>
+    </div>
 
+    <!-- ════════════════════════════════ RESULTS ══════════════════════════ -->
+    <section class="results-section" id="resultsSection" aria-label="Prediction results">
+
+      <div class="estimate-banner" id="estimateBanner" style="display:none">
+        <svg viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span id="estimateBannerMsg"></span>
+      </div>
+
+      <div class="results-grid">
+
+        <!-- ── LEFT: dish + ingredients ─────────────────────────────── -->
+        <div class="results-left">
+
+          <!-- Dish hero (image + name + description) -->
+          <div class="dish-hero-card" id="dishInfoCard" style="display:none">
+            <div id="dishImageWrap">
+              <div class="dish-hero-placeholder">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                <span>No image found</span>
+              </div>
+            </div>
+            <div class="dish-hero-body">
+              <h3 id="dishName"></h3>
+              <p class="dish-description" id="dishDescription"></p>
+            </div>
+          </div>
+
+          <!-- Ingredients table -->
+          <div class="card">
+            <div class="card-title">
+              Ingredients
+              <span class="recipe-name-badge" id="recipeName"></span>
+            </div>
+            <div class="card-divider"></div>
+            <div style="overflow-x:auto">
+              <table class="data-table" aria-label="Ingredient breakdown">
+                <thead>
+                  <tr>
+                    <th>Ingredient</th>
+                    <th>Weight</th>
+                    <th>Source</th>
+                    <th>Confidence</th>
+                    <th>Evidence</th>
+                    <th>Sensory profile</th>
+                  </tr>
+                </thead>
+                <tbody id="ingredientTbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- ── RIGHT: radar + scores ─────────────────────────────────── -->
+        <div class="results-right">
+
+          <div class="card">
+            <div class="section-label">Flavour Profile</div>
+            <div class="chart-canvas-wrap">
+              <canvas id="radarCanvas" width="340" height="340" aria-label="Radar chart of predicted sensory scores"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="section-label">Predicted Scores</div>
+            <div class="score-legend">
+              <span>Score / 100</span>
+              <span style="border-left:1px solid var(--border);padding-left:14px">Range = predicted ± RMSE</span>
+            </div>
+            <div id="scoresContainer"></div>
+          </div>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div><!-- /container -->
 </main>
 
 <footer>

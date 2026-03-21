@@ -209,7 +209,8 @@ function buildDishInfo(dish_info, recipe_name) {
     const img = document.createElement('img');
     img.src = dish_info.image_url;
     img.alt = recipe_name;
-    img.onerror = () => { wrap.innerHTML = `<div class="dish-placeholder"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Image unavailable</span></div>`; };
+    img.className = 'dish-hero-image';
+    img.onerror = () => { wrap.innerHTML = `<div class="dish-hero-placeholder"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Image unavailable</span></div>`; };
     wrap.innerHTML = ''; wrap.appendChild(img);
   }
 }
@@ -251,6 +252,7 @@ predictBtn.addEventListener('click', async () => {
     buildScoresTable(predictions, confidence);
     buildRadar(predictions, confidence);
     document.getElementById('estimateBanner').style.display = 'none';
+    document.getElementById('mainContainer').classList.add('wide');
     resultsEl.classList.add('visible');
     resultsEl.scrollIntoView({ behavior:'smooth', block:'start' });
   } catch (err) {
