@@ -222,26 +222,31 @@ def _research_ingredient(name: str) -> dict:
         '"confidence":"High"|"Medium"|"Low","evidence":"<cited source or reasoning>"}'
     )
 
-    # Primary: single call with web search — Anthropic executes the tool server-side
+    # Primary: single call with web search — Anthropic executes searches server-side,
+    # response comes back as end_turn with many fragmented BetaTextBlocks.
+    # Concatenate ALL text blocks then parse JSON from the combined string.
     try:
-        response = anthropic.Anthropic().messages.create(
+        response = anthropic.Anthropic().beta.messages.create(
             model="claude-opus-4-6",
             max_tokens=1024,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": prompt}],
             betas=["web-search-2025-03-05"],
         )
-        for block in reversed(response.content):
-            if hasattr(block, "text") and block.text.strip():
-                result = _parse_result(block.text)
-                if result:
-                    return result
+        full_text = " ".join(
+            block.text for block in response.content
+            if hasattr(block, "text") and block.text.strip()
+        )
+        result = _parse_result(full_text)
+        if result:
+            return result
+        print(f"[webapp] web research parse failed for '{name}', falling back")
     except Exception as exc:
         print(f"[webapp] web research for '{name}' failed: {exc}")
 
     # Fallback: Claude-only prediction (no web search, always succeeds)
     try:
-        response = anthropic.Anthropic().messages.create(
+        response = anthropic.Anthropic().beta.messages.create(
             model="claude-opus-4-6",
             max_tokens=512,
             messages=[{"role": "user", "content": (
@@ -475,54 +480,24 @@ def _scrape_image_from_url(url: str) -> str | None:
 
 
 def _search_dish_image(recipe_name: str) -> str | None:
-    """
-    Find a dish image by scraping a known recipe site search page.
-    Tries DuckDuckGo image search, then falls back to scraping a Google-linked page.
-    No API key required.
-    """
+    """Find a dish image via Wikipedia REST API (free, no auth, reliable)."""
     import requests
-    from bs4 import BeautifulSoup
     from urllib.parse import quote_plus
 
     headers = {"User-Agent": "Mozilla/5.0 (compatible; FlavorLab/1.0)"}
-    query = quote_plus(f"{recipe_name} recipe")
 
-    # Try: scrape the first AllRecipes/BBC Food result for its og:image
-    search_urls = [
-        f"https://www.allrecipes.com/search?q={query}",
-        f"https://www.bbcgoodfood.com/search?q={query}",
-    ]
-    for search_url in search_urls:
+    # Try exact name, then first two words (e.g. "Chocolate Cake" from "Chocolate Cake with Ganache")
+    candidates = [recipe_name, " ".join(recipe_name.split()[:2])]
+    for candidate in candidates:
         try:
-            resp = requests.get(search_url, headers=headers, timeout=10)
-            soup = BeautifulSoup(resp.text, "html.parser")
-            # Find the first recipe card link
-            link = soup.find("a", href=re.compile(r"/recipe/"))
-            if not link:
-                continue
-            href = link["href"]
-            if not href.startswith("http"):
-                from urllib.parse import urlparse
-                p = urlparse(search_url)
-                href = f"{p.scheme}://{p.netloc}{href}"
-            img = _scrape_image_from_url(href)
-            if img:
-                return img
-        except Exception as exc:
-            print(f"[webapp] image search on {search_url} failed: {exc}")
-
-    # Last resort: Wikimedia Commons thumbnail via API (no auth needed)
-    try:
-        title = recipe_name.replace(" ", "_")
-        api = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(recipe_name)}"
-        resp = requests.get(api, headers=headers, timeout=8)
-        data = resp.json()
-        img = data.get("thumbnail", {}).get("source")
-        if img:
-            return img
-    except Exception:
-        pass
-
+            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(candidate)}"
+            resp = requests.get(url, headers=headers, timeout=8)
+            if resp.status_code == 200:
+                img = resp.json().get("thumbnail", {}).get("source")
+                if img:
+                    return img
+        except Exception:
+            pass
     return None
 
 
