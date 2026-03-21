@@ -19,7 +19,7 @@ import time
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 SRC_DIR = os.path.join(PROJECT_ROOT, "src")
-RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
+RESULTS_DIR = os.path.join(PROJECT_ROOT, os.pardir, "results")
 PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 
 STEP_MAP = {
