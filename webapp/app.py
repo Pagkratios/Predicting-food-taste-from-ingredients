@@ -24,7 +24,19 @@ LASSO_SRC    = os.path.join(REPO_ROOT, "Lasso", "src")
 PROC_DIR     = os.path.join(REPO_ROOT, "Lasso", "data", "processed")
 MODELS_PATH  = os.path.join(REPO_ROOT, "results", "models", "final_models.pkl")
 METRICS_PATH = os.path.join(REPO_ROOT, "results", "metrics", "lasso_metrics.csv")
-DB_PATH      = os.path.join(REPO_ROOT, "data", "sensory_database.json")
+EXCEL_PATH   = os.path.join(REPO_ROOT, "data", "Supplementary_Data_File_1_v11.xlsx")
+EXCEL_SHEET  = "foods"
+
+# Excel column → internal key mapping
+COL_NAME    = "Food Name (EN)"
+COL_SWEET   = "Sweet Mean"
+COL_SOUR    = "Sour Mean"
+COL_BITTER  = "Bitter Mean"
+COL_UMAMI   = "Umami Mean"
+COL_SALTY   = "Salt Mean"
+COL_PRED    = "predicted"
+COL_CONF    = "confidence"
+COL_EVID    = "evidence"
 
 # Canonical sensory order – must match preprocess.py SENSORY_KEYS and plot_config.py SENSORY_ORDER
 FEATURE_KEYS  = ["sweet", "bitter", "salty", "umami", "sour"]
@@ -73,41 +85,62 @@ _models = load_models()
 _rmse   = load_rmse()
 
 
-# ── Sensory database (JSON) ───────────────────────────────────────────────────
+# ── Sensory database (Excel – foods sheet) ────────────────────────────────────
 
-def _load_db() -> list[dict]:
-    with open(DB_PATH, encoding="utf-8") as f:
-        return json.load(f)
-
-
-def _save_db(entries: list[dict]) -> None:
-    with open(DB_PATH, "w", encoding="utf-8") as f:
-        json.dump(entries, f, indent=2, ensure_ascii=False)
+def _load_db_df() -> pd.DataFrame:
+    return pd.read_excel(EXCEL_PATH, sheet_name=EXCEL_SHEET, engine="openpyxl")
 
 
-def _append_to_db(entry: dict) -> None:
-    """Append a new researched ingredient to the JSON database."""
-    entries = _load_db()
+def _append_to_db(new_row: dict) -> None:
+    """Append a researched ingredient row and save back, preserving all other sheets."""
+    df = _load_db_df()
     # Guard against duplicates
-    name_key = entry["name"].lower().strip()
-    if any(e["name"].lower().strip() == name_key for e in entries):
+    name_key = str(new_row[COL_NAME]).lower().strip()
+    if any(str(v).lower().strip() == name_key for v in df[COL_NAME].dropna()):
         return
-    entries.append(entry)
-    _save_db(entries)
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    with pd.ExcelWriter(EXCEL_PATH, engine="openpyxl", mode="a", if_sheet_exists="replace") as writer:
+        df.to_excel(writer, sheet_name=EXCEL_SHEET, index=False)
 
 
-# Load DB names once at startup for matching
-_db_entries: list[dict] = _load_db()
-_db_names:   list[str]  = [e["name"] for e in _db_entries]
-_db_map:     dict       = {e["name"]: e for e in _db_entries}
+def _build_cache(df: pd.DataFrame) -> tuple[list[str], dict]:
+    names, mapping = [], {}
+    for _, row in df.iterrows():
+        name = row.get(COL_NAME)
+        if not name or pd.isna(name):
+            continue
+        try:
+            scores = {
+                "sweet":  float(row[COL_SWEET]),
+                "sour":   float(row[COL_SOUR]),
+                "bitter": float(row[COL_BITTER]),
+                "umami":  float(row[COL_UMAMI]),
+                "salty":  float(row[COL_SALTY]),
+            }
+        except (KeyError, ValueError, TypeError):
+            continue
+        if any(pd.isna(v) for v in scores.values()):
+            continue
+        predicted = str(row.get(COL_PRED, "")).strip().lower() == "yes"
+        mapping[str(name)] = {
+            **scores,
+            "source":     "predicted" if predicted else "database",
+            "confidence": row.get(COL_CONF) if predicted else None,
+            "evidence":   row.get(COL_EVID)  if predicted else None,
+        }
+        names.append(str(name))
+    return names, mapping
+
+
+# Load DB once at startup
+_db_names: list[str] = []
+_db_map:   dict      = {}
+_db_names, _db_map = _build_cache(_load_db_df())
 
 
 def _reload_db_cache() -> None:
-    """Refresh in-memory DB cache after appending a new entry."""
-    global _db_entries, _db_names, _db_map
-    _db_entries = _load_db()
-    _db_names   = [e["name"] for e in _db_entries]
-    _db_map     = {e["name"]: e for e in _db_entries}
+    global _db_names, _db_map
+    _db_names, _db_map = _build_cache(_load_db_df())
 
 
 # ── Ingredient lookup ─────────────────────────────────────────────────────────
@@ -155,24 +188,19 @@ def _research_ingredient(name: str) -> dict:
     """
     client = anthropic.Anthropic()
     prompt = (
-        f'Research the sensory taste profile of "{name}" for use in food science.\n\n'
-        "Find taste intensities on a 0–100 scale (Spectrum™ or equivalent) for:\n"
-        "sweet, sour, bitter, umami, salty.\n\n"
-        "Assign confidence based on what you find:\n"
-        "HIGH   — solid cited scientific evidence (food science papers, official food databases)\n"
-        "MEDIUM — scattered or indirect sources, enough to make a reasonable estimate\n"
-        "LOW    — little to nothing found; predict from your food science knowledge\n\n"
-        "You MUST always return scores. Never refuse or return null scores.\n\n"
-        "Return ONLY this JSON (no markdown, no extra text):\n"
-        '{\n'
-        '  "sweet": <0-100>,\n'
-        '  "sour": <0-100>,\n'
-        '  "bitter": <0-100>,\n'
-        '  "umami": <0-100>,\n'
-        '  "salty": <0-100>,\n'
-        '  "confidence": "High" | "Medium" | "Low",\n'
-        '  "evidence": "<1-2 sentences citing sources or explaining reasoning>"\n'
-        '}'
+        f'Search for the sensory taste profile of "{name}" using scientific sources.\n\n'
+        "Look for peer-reviewed food science papers, official food databases (e.g. Wageningen SVT, "
+        "USDA, Flavor DB, Nizo), or validated sensory studies. Find Spectrum™ scale scores (0–100) "
+        "for: sweet, sour, bitter, umami, salty.\n\n"
+        "Confidence rules:\n"
+        "HIGH   — direct measurement found in a cited paper or database (include DOI or URL)\n"
+        "MEDIUM — indirect/related sources; estimate with reasoning\n"
+        "LOW    — no sources found; predict from food science knowledge\n\n"
+        "You MUST always return numeric scores. Never refuse.\n"
+        "evidence field: cite the actual source with author, year, and DOI/URL if available.\n\n"
+        "Return ONLY this JSON (no markdown):\n"
+        '{"sweet":<0-100>,"sour":<0-100>,"bitter":<0-100>,"umami":<0-100>,"salty":<0-100>,'
+        '"confidence":"High"|"Medium"|"Low","evidence":"<cited source or reasoning>"}'
     )
     messages = [{"role": "user", "content": prompt}]
 
@@ -194,7 +222,7 @@ def _research_ingredient(name: str) -> dict:
     try:
         for _ in range(6):
             response = client.beta.messages.create(
-                model="claude-sonnet-4-6",
+                model="claude-opus-4-6",
                 max_tokens=1024,
                 tools=[{"type": "web_search_20250305", "name": "web_search"}],
                 messages=messages,
@@ -221,7 +249,7 @@ def _research_ingredient(name: str) -> dict:
     # Fallback: ask Claude without web search (always succeeds)
     try:
         fallback = anthropic.Anthropic().messages.create(
-            model="claude-sonnet-4-6",
+            model="claude-opus-4-6",
             max_tokens=512,
             messages=[{"role": "user", "content": (
                 f'Predict the sensory taste profile of "{name}" from your food science knowledge.\n'
@@ -277,10 +305,10 @@ def enrich_ingredients(ingredients: list) -> list:
             enriched.append({
                 **ing,
                 "sensory_scores": scores,
-                "source":         "database",
+                "source":         entry["source"],
                 "matched_name":   db_match,
-                "confidence":     None,
-                "evidence":       None,
+                "confidence":     entry["confidence"],
+                "evidence":       entry["evidence"],
             })
             continue
 
@@ -292,17 +320,17 @@ def enrich_ingredients(ingredients: list) -> list:
         confidence = result.get("confidence", "Low")
         evidence   = result.get("evidence", "")
 
-        # Step 3: persist to database
+        # Step 3: persist to Excel
         new_entry = {
-            "name":       name,
-            "sweet":      scores["sweet"],
-            "sour":       scores["sour"],
-            "bitter":     scores["bitter"],
-            "umami":      scores["umami"],
-            "salty":      scores["salty"],
-            "predicted":  True,
-            "confidence": confidence,
-            "evidence":   evidence,
+            COL_NAME:   name,
+            COL_SWEET:  scores["sweet"],
+            COL_SOUR:   scores["sour"],
+            COL_BITTER: scores["bitter"],
+            COL_UMAMI:  scores["umami"],
+            COL_SALTY:  scores["salty"],
+            COL_PRED:   "Yes",
+            COL_CONF:   confidence,
+            COL_EVID:   evidence,
         }
         _append_to_db(new_entry)
         _reload_db_cache()
@@ -527,10 +555,9 @@ def enrich_with_dish_info(recipe_name: str, source_url: str | None = None) -> di
     try:
         msg = anthropic.Anthropic().messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=256,
+            max_tokens=80,
             messages=[{"role": "user", "content": (
-                f'Write a 2–3 sentence professional food science description of "{recipe_name}". '
-                "Focus on its sensory character (taste, texture, aroma). Plain text only."
+                f'Write ONE short sentence summarising what "{recipe_name}" tastes like. Plain text only.'
             )}],
         )
         description = msg.content[0].text.strip()

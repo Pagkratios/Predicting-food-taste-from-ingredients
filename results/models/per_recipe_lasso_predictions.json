@@ -1,0 +1,1682 @@
+[
+  {
+    "recipe_name": "Bread brown wheat with unsalted butter",
+    "pred": {
+      "sweet": 13.93,
+      "bitter": 1.65,
+      "salty": 24.66,
+      "umami": 7.62,
+      "sour": 7.32
+    },
+    "actual": {
+      "sweet": 8.0,
+      "bitter": 1.0,
+      "salty": 18.0,
+      "umami": 2.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 5.93,
+      "bitter": 0.65,
+      "salty": 6.66,
+      "umami": 5.62,
+      "sour": 5.32
+    }
+  },
+  {
+    "recipe_name": "Bread with Becel Light and apple syrup",
+    "pred": {
+      "sweet": 25.79,
+      "bitter": 1.82,
+      "salty": 20.69,
+      "umami": 4.5,
+      "sour": 11.03
+    },
+    "actual": {
+      "sweet": 54.0,
+      "bitter": 3.0,
+      "salty": 13.0,
+      "umami": 3.0,
+      "sour": 28.0
+    },
+    "diff": {
+      "sweet": -28.21,
+      "bitter": -1.18,
+      "salty": 7.69,
+      "umami": 1.5,
+      "sour": -16.97
+    }
+  },
+  {
+    "recipe_name": "Bread with Becel Light and honey",
+    "pred": {
+      "sweet": 27.96,
+      "bitter": 2.09,
+      "salty": 19.51,
+      "umami": 3.88,
+      "sour": 4.29
+    },
+    "actual": {
+      "sweet": 65.0,
+      "bitter": 1.0,
+      "salty": 10.0,
+      "umami": 1.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": -37.04,
+      "bitter": 1.09,
+      "salty": 9.51,
+      "umami": 2.88,
+      "sour": 2.29
+    }
+  },
+  {
+    "recipe_name": "Bread with Becel Light and jam",
+    "pred": {
+      "sweet": 28.13,
+      "bitter": 1.89,
+      "salty": 19.27,
+      "umami": 3.48,
+      "sour": 8.03
+    },
+    "actual": {
+      "sweet": 54.0,
+      "bitter": 1.0,
+      "salty": 11.0,
+      "umami": 1.0,
+      "sour": 12.0
+    },
+    "diff": {
+      "sweet": -25.87,
+      "bitter": 0.89,
+      "salty": 8.27,
+      "umami": 2.48,
+      "sour": -3.97
+    }
+  },
+  {
+    "recipe_name": "Bread with Becel Light and peanut butter",
+    "pred": {
+      "sweet": 16.77,
+      "bitter": 1.67,
+      "salty": 25.98,
+      "umami": 7.32,
+      "sour": 6.83
+    },
+    "actual": {
+      "sweet": 21.0,
+      "bitter": 2.0,
+      "salty": 28.0,
+      "umami": 5.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": -4.23,
+      "bitter": -0.33,
+      "salty": -2.02,
+      "umami": 2.32,
+      "sour": 4.83
+    }
+  },
+  {
+    "recipe_name": "Bread brown wheat with salted butter",
+    "pred": {
+      "sweet": 13.77,
+      "bitter": 1.72,
+      "salty": 26.82,
+      "umami": 5.18,
+      "sour": 8.1
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 2.0,
+      "salty": 28.0,
+      "umami": 2.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": 6.77,
+      "bitter": -0.28,
+      "salty": -1.18,
+      "umami": 3.18,
+      "sour": 5.1
+    }
+  },
+  {
+    "recipe_name": "Olvarit spring vegetables risotto/tomato 6m",
+    "pred": {
+      "sweet": 12.44,
+      "bitter": 1.41,
+      "salty": 27.82,
+      "umami": 16.11,
+      "sour": 8.19
+    },
+    "actual": {
+      "sweet": 13.0,
+      "bitter": 3.0,
+      "salty": 10.0,
+      "umami": 11.0,
+      "sour": 11.0
+    },
+    "diff": {
+      "sweet": -0.56,
+      "bitter": -1.59,
+      "salty": 17.82,
+      "umami": 5.11,
+      "sour": -2.81
+    }
+  },
+  {
+    "recipe_name": "Olvarit toddler menu broccoli/chicken 12m",
+    "pred": {
+      "sweet": 8.71,
+      "bitter": 1.69,
+      "salty": 30.77,
+      "umami": 18.1,
+      "sour": 8.34
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 4.0,
+      "salty": 13.0,
+      "umami": 10.0,
+      "sour": 8.0
+    },
+    "diff": {
+      "sweet": 1.71,
+      "bitter": -2.31,
+      "salty": 17.77,
+      "umami": 8.1,
+      "sour": 0.34
+    }
+  },
+  {
+    "recipe_name": "Olvarit stew with chicken 6m",
+    "pred": {
+      "sweet": 11.95,
+      "bitter": 1.41,
+      "salty": 29.27,
+      "umami": 15.2,
+      "sour": 6.68
+    },
+    "actual": {
+      "sweet": 14.0,
+      "bitter": 2.0,
+      "salty": 13.0,
+      "umami": 13.0,
+      "sour": 7.0
+    },
+    "diff": {
+      "sweet": -2.05,
+      "bitter": -0.59,
+      "salty": 16.27,
+      "umami": 2.2,
+      "sour": -0.32
+    }
+  },
+  {
+    "recipe_name": "Mashed potatoes with carrots and onions (hutspot)",
+    "pred": {
+      "sweet": 14.4,
+      "bitter": 1.84,
+      "salty": 32.37,
+      "umami": 18.07,
+      "sour": 7.81
+    },
+    "actual": {
+      "sweet": 10.0,
+      "bitter": 1.0,
+      "salty": 37.0,
+      "umami": 11.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": 4.4,
+      "bitter": 0.84,
+      "salty": -4.63,
+      "umami": 7.07,
+      "sour": 1.81
+    }
+  },
+  {
+    "recipe_name": "Olvarit French beans beef and potatoes 8m",
+    "pred": {
+      "sweet": 10.02,
+      "bitter": 1.6,
+      "salty": 30.25,
+      "umami": 16.14,
+      "sour": 7.28
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 3.0,
+      "salty": 10.0,
+      "umami": 5.0,
+      "sour": 10.0
+    },
+    "diff": {
+      "sweet": 4.02,
+      "bitter": -1.4,
+      "salty": 20.25,
+      "umami": 11.14,
+      "sour": -2.72
+    }
+  },
+  {
+    "recipe_name": "Potatoes mashed prepared with semi-skimmed milk and margarine",
+    "pred": {
+      "sweet": 13.51,
+      "bitter": 1.07,
+      "salty": 31.32,
+      "umami": 15.94,
+      "sour": 3.91
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 1.0,
+      "salty": 44.0,
+      "umami": 15.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": 6.51,
+      "bitter": 0.07,
+      "salty": -12.68,
+      "umami": 0.94,
+      "sour": 0.91
+    }
+  },
+  {
+    "recipe_name": "Mashed potatoes with kale (stamppot boerenkool)",
+    "pred": {
+      "sweet": 9.83,
+      "bitter": 1.85,
+      "salty": 34.98,
+      "umami": 20.25,
+      "sour": 8.25
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 3.0,
+      "salty": 41.0,
+      "umami": 13.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": 3.83,
+      "bitter": -1.15,
+      "salty": -6.02,
+      "umami": 7.25,
+      "sour": 2.25
+    }
+  },
+  {
+    "recipe_name": "Soup legume based ready-made prepared",
+    "pred": {
+      "sweet": 14.77,
+      "bitter": 1.62,
+      "salty": 29.31,
+      "umami": 16.51,
+      "sour": 7.26
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 2.0,
+      "salty": 44.0,
+      "umami": 20.0,
+      "sour": 10.0
+    },
+    "diff": {
+      "sweet": 7.77,
+      "bitter": -0.38,
+      "salty": -14.69,
+      "umami": -3.49,
+      "sour": -2.74
+    }
+  },
+  {
+    "recipe_name": "Stock from cube prepared",
+    "pred": {
+      "sweet": 9.31,
+      "bitter": 1.73,
+      "salty": 26.9,
+      "umami": 14.24,
+      "sour": 8.26
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 1.0,
+      "salty": 57.0,
+      "umami": 41.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": 2.31,
+      "bitter": 0.73,
+      "salty": -30.1,
+      "umami": -26.76,
+      "sour": 5.26
+    }
+  },
+  {
+    "recipe_name": "Nasi with chicken saté",
+    "pred": {
+      "sweet": 16.89,
+      "bitter": 1.68,
+      "salty": 30.78,
+      "umami": 15.63,
+      "sour": 6.71
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 1.0,
+      "salty": 39.0,
+      "umami": 27.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 10.89,
+      "bitter": 0.68,
+      "salty": -8.22,
+      "umami": -11.37,
+      "sour": 4.71
+    }
+  },
+  {
+    "recipe_name": "Soup thickened with meat and vegetables",
+    "pred": {
+      "sweet": 14.84,
+      "bitter": 1.24,
+      "salty": 31.34,
+      "umami": 19.9,
+      "sour": 13.28
+    },
+    "actual": {
+      "sweet": 19.0,
+      "bitter": 1.0,
+      "salty": 32.0,
+      "umami": 32.0,
+      "sour": 22.0
+    },
+    "diff": {
+      "sweet": -4.16,
+      "bitter": 0.24,
+      "salty": -0.66,
+      "umami": -12.1,
+      "sour": -8.72
+    }
+  },
+  {
+    "recipe_name": "Minced meat loaf fried",
+    "pred": {
+      "sweet": 5.94,
+      "bitter": 1.57,
+      "salty": 42.78,
+      "umami": 22.64,
+      "sour": 7.88
+    },
+    "actual": {
+      "sweet": 4.0,
+      "bitter": 1.0,
+      "salty": 38.0,
+      "umami": 21.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": 1.94,
+      "bitter": 0.57,
+      "salty": 4.78,
+      "umami": 1.64,
+      "sour": 1.88
+    }
+  },
+  {
+    "recipe_name": "Soup clear with meat vegetables and noodles",
+    "pred": {
+      "sweet": 11.65,
+      "bitter": 1.76,
+      "salty": 28.41,
+      "umami": 16.14,
+      "sour": 10.14
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 1.0,
+      "salty": 42.0,
+      "umami": 21.0,
+      "sour": 7.0
+    },
+    "diff": {
+      "sweet": 4.65,
+      "bitter": 0.76,
+      "salty": -13.59,
+      "umami": -4.86,
+      "sour": 3.14
+    }
+  },
+  {
+    "recipe_name": "Chinese noodle ball (bamischijf) fried",
+    "pred": {
+      "sweet": 8.04,
+      "bitter": 1.38,
+      "salty": 37.56,
+      "umami": 22.31,
+      "sour": 8.91
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 1.0,
+      "salty": 45.0,
+      "umami": 37.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": -0.96,
+      "bitter": 0.38,
+      "salty": -7.44,
+      "umami": -14.69,
+      "sour": 5.91
+    }
+  },
+  {
+    "recipe_name": "Rice white boiled",
+    "pred": {
+      "sweet": 9.66,
+      "bitter": 1.55,
+      "salty": 27.7,
+      "umami": 15.32,
+      "sour": 7.33
+    },
+    "actual": {
+      "sweet": 3.0,
+      "bitter": 2.0,
+      "salty": 2.0,
+      "umami": 4.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 6.66,
+      "bitter": -0.45,
+      "salty": 25.7,
+      "umami": 11.32,
+      "sour": 5.33
+    }
+  },
+  {
+    "recipe_name": "Soup clear with meat and vegetables",
+    "pred": {
+      "sweet": 10.2,
+      "bitter": 1.62,
+      "salty": 28.87,
+      "umami": 15.82,
+      "sour": 8.29
+    },
+    "actual": {
+      "sweet": 12.0,
+      "bitter": 1.0,
+      "salty": 37.0,
+      "umami": 37.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": -1.8,
+      "bitter": 0.62,
+      "salty": -8.13,
+      "umami": -21.18,
+      "sour": 5.29
+    }
+  },
+  {
+    "recipe_name": "Crisps potato light unflavoured",
+    "pred": {
+      "sweet": 12.13,
+      "bitter": 1.0,
+      "salty": 33.1,
+      "umami": 16.22,
+      "sour": 3.58
+    },
+    "actual": {
+      "sweet": 8.0,
+      "bitter": 0.0,
+      "salty": 57.0,
+      "umami": 6.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 4.13,
+      "bitter": 1.0,
+      "salty": -23.9,
+      "umami": 10.22,
+      "sour": 1.58
+    }
+  },
+  {
+    "recipe_name": "Chicken schnitzel (pan-fried)",
+    "pred": {
+      "sweet": 9.72,
+      "bitter": 0.87,
+      "salty": 39.16,
+      "umami": 20.78,
+      "sour": 7.54
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 1.0,
+      "salty": 35.0,
+      "umami": 13.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 3.72,
+      "bitter": -0.13,
+      "salty": 4.16,
+      "umami": 7.78,
+      "sour": 5.54
+    }
+  },
+  {
+    "recipe_name": "Baguette with herb butter",
+    "pred": {
+      "sweet": 16.7,
+      "bitter": 2.22,
+      "salty": 29.24,
+      "umami": 5.28,
+      "sour": 12.71
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 1.0,
+      "salty": 41.0,
+      "umami": 14.0,
+      "sour": 8.0
+    },
+    "diff": {
+      "sweet": 10.7,
+      "bitter": 1.22,
+      "salty": -11.76,
+      "umami": -8.72,
+      "sour": 4.71
+    }
+  },
+  {
+    "recipe_name": "Lasagne bolognese",
+    "pred": {
+      "sweet": 12.4,
+      "bitter": 1.16,
+      "salty": 30.55,
+      "umami": 17.72,
+      "sour": 10.84
+    },
+    "actual": {
+      "sweet": 12.0,
+      "bitter": 1.0,
+      "salty": 42.0,
+      "umami": 32.0,
+      "sour": 8.0
+    },
+    "diff": {
+      "sweet": 0.4,
+      "bitter": 0.16,
+      "salty": -11.45,
+      "umami": -14.28,
+      "sour": 2.84
+    }
+  },
+  {
+    "recipe_name": "Chicken cordon bleu (pan-fried)",
+    "pred": {
+      "sweet": 9.45,
+      "bitter": 0.1,
+      "salty": 44.21,
+      "umami": 23.98,
+      "sour": 5.58
+    },
+    "actual": {
+      "sweet": 5.0,
+      "bitter": 1.0,
+      "salty": 46.0,
+      "umami": 28.0,
+      "sour": 7.0
+    },
+    "diff": {
+      "sweet": 4.45,
+      "bitter": -0.9,
+      "salty": -1.79,
+      "umami": -4.02,
+      "sour": -1.42
+    }
+  },
+  {
+    "recipe_name": "Peas and carrots tinned",
+    "pred": {
+      "sweet": 26.8,
+      "bitter": 1.69,
+      "salty": 24.13,
+      "umami": 10.45,
+      "sour": 2.46
+    },
+    "actual": {
+      "sweet": 13.0,
+      "bitter": 1.0,
+      "salty": 16.0,
+      "umami": 8.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 13.8,
+      "bitter": 0.69,
+      "salty": 8.13,
+      "umami": 2.45,
+      "sour": 0.46
+    }
+  },
+  {
+    "recipe_name": "Peanut butter with nut pieces",
+    "pred": {
+      "sweet": 21.15,
+      "bitter": 1.74,
+      "salty": 37.45,
+      "umami": 5.15,
+      "sour": 3.9
+    },
+    "actual": {
+      "sweet": 24.0,
+      "bitter": 2.0,
+      "salty": 33.0,
+      "umami": 8.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": -2.85,
+      "bitter": -0.26,
+      "salty": 4.45,
+      "umami": -2.85,
+      "sour": -0.1
+    }
+  },
+  {
+    "recipe_name": "Spaghetti bolognese",
+    "pred": {
+      "sweet": 13.25,
+      "bitter": 1.24,
+      "salty": 30.37,
+      "umami": 17.43,
+      "sour": 11.82
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 0.0,
+      "salty": 29.0,
+      "umami": 25.0,
+      "sour": 11.0
+    },
+    "diff": {
+      "sweet": 4.25,
+      "bitter": 1.24,
+      "salty": 1.37,
+      "umami": -7.57,
+      "sour": 0.82
+    }
+  },
+  {
+    "recipe_name": "Salad cream 25% oil",
+    "pred": {
+      "sweet": 13.2,
+      "bitter": 1.5,
+      "salty": 26.39,
+      "umami": 12.24,
+      "sour": 14.32
+    },
+    "actual": {
+      "sweet": 11.0,
+      "bitter": 2.0,
+      "salty": 32.0,
+      "umami": 8.0,
+      "sour": 33.0
+    },
+    "diff": {
+      "sweet": 2.2,
+      "bitter": -0.5,
+      "salty": -5.61,
+      "umami": 4.24,
+      "sour": -18.68
+    }
+  },
+  {
+    "recipe_name": "Beef steak tartare spiced (filet americain)",
+    "pred": {
+      "sweet": 8.03,
+      "bitter": 0.9,
+      "salty": 43.93,
+      "umami": 21.93,
+      "sour": 14.65
+    },
+    "actual": {
+      "sweet": 8.0,
+      "bitter": 0.0,
+      "salty": 41.0,
+      "umami": 19.0,
+      "sour": 5.0
+    },
+    "diff": {
+      "sweet": 0.03,
+      "bitter": 0.9,
+      "salty": 2.93,
+      "umami": 2.93,
+      "sour": 9.65
+    }
+  },
+  {
+    "recipe_name": "Croissant with ham and cheese",
+    "pred": {
+      "sweet": 10.04,
+      "bitter": 0.29,
+      "salty": 42.03,
+      "umami": 23.4,
+      "sour": 4.42
+    },
+    "actual": {
+      "sweet": 10.0,
+      "bitter": 1.0,
+      "salty": 38.0,
+      "umami": 16.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": 0.04,
+      "bitter": -0.71,
+      "salty": 4.03,
+      "umami": 7.4,
+      "sour": 0.42
+    }
+  },
+  {
+    "recipe_name": "Springroll frozen (deep-fried)",
+    "pred": {
+      "sweet": 11.83,
+      "bitter": 2.27,
+      "salty": 31.19,
+      "umami": 19.17,
+      "sour": 10.62
+    },
+    "actual": {
+      "sweet": 11.0,
+      "bitter": 1.0,
+      "salty": 36.0,
+      "umami": 26.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": 0.83,
+      "bitter": 1.27,
+      "salty": -4.81,
+      "umami": -6.83,
+      "sour": 4.62
+    }
+  },
+  {
+    "recipe_name": "Apple pie Dutch with shortbread with margarine",
+    "pred": {
+      "sweet": 40.76,
+      "bitter": 1.46,
+      "salty": 15.36,
+      "umami": 3.33,
+      "sour": 28.05
+    },
+    "actual": {
+      "sweet": 54.0,
+      "bitter": 1.0,
+      "salty": 11.0,
+      "umami": 2.0,
+      "sour": 14.0
+    },
+    "diff": {
+      "sweet": -13.24,
+      "bitter": 0.46,
+      "salty": 4.36,
+      "umami": 1.33,
+      "sour": 14.05
+    }
+  },
+  {
+    "recipe_name": "Mayonnaise",
+    "pred": {
+      "sweet": 14.62,
+      "bitter": 1.37,
+      "salty": 25.87,
+      "umami": 10.8,
+      "sour": 15.77
+    },
+    "actual": {
+      "sweet": 10.0,
+      "bitter": 1.0,
+      "salty": 25.0,
+      "umami": 8.0,
+      "sour": 33.0
+    },
+    "diff": {
+      "sweet": 4.62,
+      "bitter": 0.37,
+      "salty": 0.87,
+      "umami": 2.8,
+      "sour": -17.23
+    }
+  },
+  {
+    "recipe_name": "Pancake (bereid)",
+    "pred": {
+      "sweet": 20.27,
+      "bitter": 1.56,
+      "salty": 24.13,
+      "umami": 11.49,
+      "sour": 6.0
+    },
+    "actual": {
+      "sweet": 15.0,
+      "bitter": 1.0,
+      "salty": 8.0,
+      "umami": 2.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 5.27,
+      "bitter": 0.56,
+      "salty": 16.13,
+      "umami": 9.49,
+      "sour": 4.0
+    }
+  },
+  {
+    "recipe_name": "Peanut sauce jar prepared",
+    "pred": {
+      "sweet": 18.99,
+      "bitter": 1.38,
+      "salty": 37.12,
+      "umami": 14.29,
+      "sour": 2.52
+    },
+    "actual": {
+      "sweet": 32.0,
+      "bitter": 2.0,
+      "salty": 41.0,
+      "umami": 14.0,
+      "sour": 9.0
+    },
+    "diff": {
+      "sweet": -13.01,
+      "bitter": -0.62,
+      "salty": -3.88,
+      "umami": 0.29,
+      "sour": -6.48
+    }
+  },
+  {
+    "recipe_name": "Pasta plain average boiled",
+    "pred": {
+      "sweet": 9.45,
+      "bitter": 1.6,
+      "salty": 27.77,
+      "umami": 15.63,
+      "sour": 6.97
+    },
+    "actual": {
+      "sweet": 3.0,
+      "bitter": 1.0,
+      "salty": 3.0,
+      "umami": 1.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 6.45,
+      "bitter": 0.6,
+      "salty": 24.77,
+      "umami": 14.63,
+      "sour": 4.97
+    }
+  },
+  {
+    "recipe_name": "Mayonnaise yoghurt based 25% oil",
+    "pred": {
+      "sweet": 19.18,
+      "bitter": 0.92,
+      "salty": 24.33,
+      "umami": 8.86,
+      "sour": 34.96
+    },
+    "actual": {
+      "sweet": 15.0,
+      "bitter": 1.0,
+      "salty": 24.0,
+      "umami": 7.0,
+      "sour": 32.0
+    },
+    "diff": {
+      "sweet": 4.18,
+      "bitter": -0.08,
+      "salty": 0.33,
+      "umami": 1.86,
+      "sour": 2.96
+    }
+  },
+  {
+    "recipe_name": "Hamburger (pan-fried)",
+    "pred": {
+      "sweet": 7.33,
+      "bitter": 0.84,
+      "salty": 43.02,
+      "umami": 20.98,
+      "sour": 4.84
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 1.0,
+      "salty": 46.0,
+      "umami": 31.0,
+      "sour": 5.0
+    },
+    "diff": {
+      "sweet": -1.67,
+      "bitter": -0.16,
+      "salty": -2.98,
+      "umami": -10.02,
+      "sour": -0.16
+    }
+  },
+  {
+    "recipe_name": "Pasta wholemeal boiled",
+    "pred": {
+      "sweet": 9.45,
+      "bitter": 1.6,
+      "salty": 27.77,
+      "umami": 15.63,
+      "sour": 6.97
+    },
+    "actual": {
+      "sweet": 4.0,
+      "bitter": 2.0,
+      "salty": 6.0,
+      "umami": 1.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": 5.45,
+      "bitter": -0.4,
+      "salty": 21.77,
+      "umami": 14.63,
+      "sour": 4.97
+    }
+  },
+  {
+    "recipe_name": "Pesto",
+    "pred": {
+      "sweet": 6.53,
+      "bitter": 2.51,
+      "salty": 38.0,
+      "umami": 23.77,
+      "sour": 17.14
+    },
+    "actual": {
+      "sweet": 5.0,
+      "bitter": 2.0,
+      "salty": 57.0,
+      "umami": 23.0,
+      "sour": 12.0
+    },
+    "diff": {
+      "sweet": 1.53,
+      "bitter": 0.51,
+      "salty": -19.0,
+      "umami": 0.77,
+      "sour": 5.14
+    }
+  },
+  {
+    "recipe_name": "Tortellini boiled",
+    "pred": {
+      "sweet": 9.94,
+      "bitter": 1.38,
+      "salty": 32.25,
+      "umami": 16.35,
+      "sour": 10.48
+    },
+    "actual": {
+      "sweet": 8.0,
+      "bitter": 1.0,
+      "salty": 25.0,
+      "umami": 15.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": 1.94,
+      "bitter": 0.38,
+      "salty": 7.25,
+      "umami": 1.35,
+      "sour": 6.48
+    }
+  },
+  {
+    "recipe_name": "Salad dressing honey/mustard",
+    "pred": {
+      "sweet": 25.72,
+      "bitter": 1.71,
+      "salty": 23.26,
+      "umami": 7.43,
+      "sour": 24.19
+    },
+    "actual": {
+      "sweet": 15.0,
+      "bitter": 2.0,
+      "salty": 40.0,
+      "umami": 14.0,
+      "sour": 41.0
+    },
+    "diff": {
+      "sweet": 10.72,
+      "bitter": -0.29,
+      "salty": -16.74,
+      "umami": -6.57,
+      "sour": -16.81
+    }
+  },
+  {
+    "recipe_name": "Mayonnaise product approximately 35% oil",
+    "pred": {
+      "sweet": 13.96,
+      "bitter": 1.34,
+      "salty": 26.01,
+      "umami": 11.87,
+      "sour": 16.29
+    },
+    "actual": {
+      "sweet": 12.0,
+      "bitter": 1.0,
+      "salty": 30.0,
+      "umami": 14.0,
+      "sour": 41.0
+    },
+    "diff": {
+      "sweet": 1.96,
+      "bitter": 0.34,
+      "salty": -3.99,
+      "umami": -2.13,
+      "sour": -24.71
+    }
+  },
+  {
+    "recipe_name": "Apple turnover",
+    "pred": {
+      "sweet": 39.21,
+      "bitter": 1.77,
+      "salty": 16.07,
+      "umami": 4.67,
+      "sour": 13.82
+    },
+    "actual": {
+      "sweet": 62.0,
+      "bitter": 1.0,
+      "salty": 12.0,
+      "umami": 1.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": -22.79,
+      "bitter": 0.77,
+      "salty": 4.07,
+      "umami": 3.67,
+      "sour": 7.82
+    }
+  },
+  {
+    "recipe_name": "Pizza margherita (warm)",
+    "pred": {
+      "sweet": 12.03,
+      "bitter": 1.23,
+      "salty": 32.38,
+      "umami": 19.58,
+      "sour": 13.17
+    },
+    "actual": {
+      "sweet": 16.0,
+      "bitter": 1.0,
+      "salty": 35.0,
+      "umami": 15.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": -3.97,
+      "bitter": 0.23,
+      "salty": -2.62,
+      "umami": 4.58,
+      "sour": 9.17
+    }
+  },
+  {
+    "recipe_name": "Croquette meat ragout frozen (deep-fried)",
+    "pred": {
+      "sweet": 9.29,
+      "bitter": 1.38,
+      "salty": 31.52,
+      "umami": 17.38,
+      "sour": 5.85
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 1.0,
+      "salty": 44.0,
+      "umami": 25.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": 0.29,
+      "bitter": 0.38,
+      "salty": -12.48,
+      "umami": -7.62,
+      "sour": -0.15
+    }
+  },
+  {
+    "recipe_name": "Bread stuffed Bapao meat",
+    "pred": {
+      "sweet": 11.25,
+      "bitter": 1.54,
+      "salty": 36.88,
+      "umami": 23.12,
+      "sour": 5.56
+    },
+    "actual": {
+      "sweet": 18.0,
+      "bitter": 0.0,
+      "salty": 35.0,
+      "umami": 25.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": -6.75,
+      "bitter": 1.54,
+      "salty": 1.88,
+      "umami": -1.88,
+      "sour": -0.44
+    }
+  },
+  {
+    "recipe_name": "Snack sausage roll puff pastry",
+    "pred": {
+      "sweet": 9.51,
+      "bitter": 0.88,
+      "salty": 34.22,
+      "umami": 20.52,
+      "sour": 6.16
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 1.0,
+      "salty": 45.0,
+      "umami": 17.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": 2.51,
+      "bitter": -0.12,
+      "salty": -10.78,
+      "umami": 3.52,
+      "sour": 2.16
+    }
+  },
+  {
+    "recipe_name": "Sauce for chips 25% oil (fritessaus)",
+    "pred": {
+      "sweet": 16.38,
+      "bitter": 1.4,
+      "salty": 25.6,
+      "umami": 11.63,
+      "sour": 17.89
+    },
+    "actual": {
+      "sweet": 12.0,
+      "bitter": 1.0,
+      "salty": 28.0,
+      "umami": 8.0,
+      "sour": 37.0
+    },
+    "diff": {
+      "sweet": 4.38,
+      "bitter": 0.4,
+      "salty": -2.4,
+      "umami": 3.63,
+      "sour": -19.11
+    }
+  },
+  {
+    "recipe_name": "Sausage Dutch Frikandel (deep-fried)",
+    "pred": {
+      "sweet": 11.01,
+      "bitter": 0.85,
+      "salty": 40.17,
+      "umami": 24.06,
+      "sour": 7.77
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 1.0,
+      "salty": 45.0,
+      "umami": 21.0,
+      "sour": 5.0
+    },
+    "diff": {
+      "sweet": 2.01,
+      "bitter": -0.15,
+      "salty": -4.83,
+      "umami": 3.06,
+      "sour": 2.77
+    }
+  },
+  {
+    "recipe_name": "Beans baked in tomato sauce tinned",
+    "pred": {
+      "sweet": 16.23,
+      "bitter": 1.26,
+      "salty": 32.65,
+      "umami": 15.92,
+      "sour": 4.71
+    },
+    "actual": {
+      "sweet": 18.0,
+      "bitter": 1.0,
+      "salty": 28.0,
+      "umami": 16.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": -1.77,
+      "bitter": 0.26,
+      "salty": 4.65,
+      "umami": -0.08,
+      "sour": -1.29
+    }
+  },
+  {
+    "recipe_name": "Spread chocolate hazelnut",
+    "pred": {
+      "sweet": 78.55,
+      "bitter": 4.55,
+      "salty": 5.21,
+      "umami": -1.49,
+      "sour": -4.12
+    },
+    "actual": {
+      "sweet": 63.0,
+      "bitter": 3.0,
+      "salty": 9.0,
+      "umami": 3.0,
+      "sour": 1.0
+    },
+    "diff": {
+      "sweet": 15.55,
+      "bitter": 1.55,
+      "salty": -3.79,
+      "umami": -4.49,
+      "sour": -5.12
+    }
+  },
+  {
+    "recipe_name": "Spread chocolade plain",
+    "pred": {
+      "sweet": 71.69,
+      "bitter": 5.02,
+      "salty": 9.46,
+      "umami": 2.57,
+      "sour": 0.16
+    },
+    "actual": {
+      "sweet": 66.0,
+      "bitter": 8.0,
+      "salty": 9.0,
+      "umami": 0.0,
+      "sour": 1.0
+    },
+    "diff": {
+      "sweet": 5.69,
+      "bitter": -2.98,
+      "salty": 0.46,
+      "umami": 2.57,
+      "sour": -0.84
+    }
+  },
+  {
+    "recipe_name": "Soup vegetable based dried packet prepared",
+    "pred": {
+      "sweet": 11.23,
+      "bitter": 1.73,
+      "salty": 26.53,
+      "umami": 13.33,
+      "sour": 7.59
+    },
+    "actual": {
+      "sweet": 8.0,
+      "bitter": 1.0,
+      "salty": 45.0,
+      "umami": 31.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": 3.23,
+      "bitter": 0.73,
+      "salty": -18.47,
+      "umami": -17.67,
+      "sour": 4.59
+    }
+  },
+  {
+    "recipe_name": "Soup vegetable based tinned prepared",
+    "pred": {
+      "sweet": 16.3,
+      "bitter": 1.13,
+      "salty": 33.01,
+      "umami": 23.32,
+      "sour": 18.07
+    },
+    "actual": {
+      "sweet": 19.0,
+      "bitter": 1.0,
+      "salty": 32.0,
+      "umami": 27.0,
+      "sour": 16.0
+    },
+    "diff": {
+      "sweet": -2.7,
+      "bitter": 0.13,
+      "salty": 1.01,
+      "umami": -3.68,
+      "sour": 2.07
+    }
+  },
+  {
+    "recipe_name": "Fish fingers fried",
+    "pred": {
+      "sweet": 6.2,
+      "bitter": 0.72,
+      "salty": 38.32,
+      "umami": 24.26,
+      "sour": 3.44
+    },
+    "actual": {
+      "sweet": 6.0,
+      "bitter": 1.0,
+      "salty": 41.0,
+      "umami": 23.0,
+      "sour": 4.0
+    },
+    "diff": {
+      "sweet": 0.2,
+      "bitter": -0.28,
+      "salty": -2.68,
+      "umami": 1.26,
+      "sour": -0.56
+    }
+  },
+  {
+    "recipe_name": "Mashed potatoes with sauerkraut (stamppot)",
+    "pred": {
+      "sweet": 12.2,
+      "bitter": 0.77,
+      "salty": 34.58,
+      "umami": 15.16,
+      "sour": 34.71
+    },
+    "actual": {
+      "sweet": 4.0,
+      "bitter": 3.0,
+      "salty": 28.0,
+      "umami": 4.0,
+      "sour": 48.0
+    },
+    "diff": {
+      "sweet": 8.2,
+      "bitter": -2.23,
+      "salty": 6.58,
+      "umami": 11.16,
+      "sour": -13.29
+    }
+  },
+  {
+    "recipe_name": "Sauce tomato ready made jar",
+    "pred": {
+      "sweet": 9.77,
+      "bitter": 1.28,
+      "salty": 43.47,
+      "umami": 35.01,
+      "sour": 23.72
+    },
+    "actual": {
+      "sweet": 20.0,
+      "bitter": 1.0,
+      "salty": 39.0,
+      "umami": 33.0,
+      "sour": 24.0
+    },
+    "diff": {
+      "sweet": -10.23,
+      "bitter": 0.28,
+      "salty": 4.47,
+      "umami": 2.01,
+      "sour": -0.28
+    }
+  },
+  {
+    "recipe_name": "Soup cup-a-soup prepared (curry)",
+    "pred": {
+      "sweet": 9.31,
+      "bitter": 1.75,
+      "salty": 29.39,
+      "umami": 16.76,
+      "sour": 7.78
+    },
+    "actual": {
+      "sweet": 10.0,
+      "bitter": 3.0,
+      "salty": 39.0,
+      "umami": 21.0,
+      "sour": 6.0
+    },
+    "diff": {
+      "sweet": -0.69,
+      "bitter": -1.25,
+      "salty": -9.61,
+      "umami": -4.24,
+      "sour": 1.78
+    }
+  },
+  {
+    "recipe_name": "Apple sauce tinned",
+    "pred": {
+      "sweet": 39.0,
+      "bitter": 0.97,
+      "salty": 15.49,
+      "umami": 2.42,
+      "sour": 51.49
+    },
+    "actual": {
+      "sweet": 46.0,
+      "bitter": 0.0,
+      "salty": 2.0,
+      "umami": 2.0,
+      "sour": 21.0
+    },
+    "diff": {
+      "sweet": -7.0,
+      "bitter": 0.97,
+      "salty": 13.49,
+      "umami": 0.42,
+      "sour": 30.49
+    }
+  },
+  {
+    "recipe_name": "Salad dressing vinaigrette",
+    "pred": {
+      "sweet": 15.43,
+      "bitter": 1.61,
+      "salty": 28.72,
+      "umami": 13.65,
+      "sour": 41.79
+    },
+    "actual": {
+      "sweet": 10.0,
+      "bitter": 2.0,
+      "salty": 41.0,
+      "umami": 11.0,
+      "sour": 56.0
+    },
+    "diff": {
+      "sweet": 5.43,
+      "bitter": -0.39,
+      "salty": -12.28,
+      "umami": 2.65,
+      "sour": -14.21
+    }
+  },
+  {
+    "recipe_name": "Ketchup curry",
+    "pred": {
+      "sweet": 36.7,
+      "bitter": 0.92,
+      "salty": 26.59,
+      "umami": 16.87,
+      "sour": 24.93
+    },
+    "actual": {
+      "sweet": 31.0,
+      "bitter": 1.0,
+      "salty": 33.0,
+      "umami": 22.0,
+      "sour": 22.0
+    },
+    "diff": {
+      "sweet": 5.7,
+      "bitter": -0.08,
+      "salty": -6.41,
+      "umami": -5.13,
+      "sour": 2.93
+    }
+  },
+  {
+    "recipe_name": "Chicken nuggets prepared in oven",
+    "pred": {
+      "sweet": 12.09,
+      "bitter": 0.72,
+      "salty": 35.88,
+      "umami": 19.8,
+      "sour": 5.58
+    },
+    "actual": {
+      "sweet": 7.0,
+      "bitter": 1.0,
+      "salty": 35.0,
+      "umami": 21.0,
+      "sour": 3.0
+    },
+    "diff": {
+      "sweet": 5.09,
+      "bitter": -0.28,
+      "salty": 0.88,
+      "umami": -1.2,
+      "sour": 2.58
+    }
+  },
+  {
+    "recipe_name": "Hot chocolate from vending machine",
+    "pred": {
+      "sweet": 33.34,
+      "bitter": 2.78,
+      "salty": 20.19,
+      "umami": 8.95,
+      "sour": 8.7
+    },
+    "actual": {
+      "sweet": 48.0,
+      "bitter": 8.0,
+      "salty": 5.0,
+      "umami": 0.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": -14.66,
+      "bitter": -5.22,
+      "salty": 15.19,
+      "umami": 8.95,
+      "sour": 6.7
+    }
+  },
+  {
+    "recipe_name": "Ketchup tomato",
+    "pred": {
+      "sweet": 34.45,
+      "bitter": 0.82,
+      "salty": 25.99,
+      "umami": 15.77,
+      "sour": 25.61
+    },
+    "actual": {
+      "sweet": 28.0,
+      "bitter": 1.0,
+      "salty": 29.0,
+      "umami": 22.0,
+      "sour": 42.0
+    },
+    "diff": {
+      "sweet": 6.45,
+      "bitter": -0.18,
+      "salty": -3.01,
+      "umami": -6.23,
+      "sour": -16.39
+    }
+  },
+  {
+    "recipe_name": "Chocolate bar milk with nuts",
+    "pred": {
+      "sweet": 63.16,
+      "bitter": 4.98,
+      "salty": 14.6,
+      "umami": 8.64,
+      "sour": 1.71
+    },
+    "actual": {
+      "sweet": 65.0,
+      "bitter": 3.0,
+      "salty": 11.0,
+      "umami": 5.0,
+      "sour": 2.0
+    },
+    "diff": {
+      "sweet": -1.84,
+      "bitter": 1.98,
+      "salty": 3.6,
+      "umami": 3.64,
+      "sour": -0.29
+    }
+  },
+  {
+    "recipe_name": "Tapenade olive",
+    "pred": {
+      "sweet": -1.81,
+      "bitter": 1.39,
+      "salty": 56.02,
+      "umami": 35.55,
+      "sour": 21.12
+    },
+    "actual": {
+      "sweet": 9.0,
+      "bitter": 1.0,
+      "salty": 43.0,
+      "umami": 32.0,
+      "sour": 26.0
+    },
+    "diff": {
+      "sweet": -10.81,
+      "bitter": 0.39,
+      "salty": 13.02,
+      "umami": 3.55,
+      "sour": -4.88
+    }
+  }
+]
