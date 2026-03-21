@@ -4,6 +4,7 @@ Flask web app for sensory score prediction using the Lasso model.
 """
 
 import json
+import re
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -167,6 +168,80 @@ Recipe text:
 """.strip()
 
 
+def fetch_url_text(url: str) -> str:
+    """Fetch a URL and return its readable text content."""
+    import requests
+    from bs4 import BeautifulSoup
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; FlavorLab/1.0)"}
+    resp = requests.get(url, headers=headers, timeout=15)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer", "header"]):
+        tag.decompose()
+    return " ".join(soup.get_text(separator=" ").split())
+
+
+def enrich_with_dish_info(recipe_name: str) -> dict:
+    """Find a dish image URL and description using Claude with web_search."""
+    client = anthropic.Anthropic()
+    prompt = (
+        f'Search the web for "{recipe_name}" dish. '
+        'Find a direct image URL (ending in .jpg, .png, or .webp from a public food/recipe site). '
+        'Also write a 2–3 sentence professional food science description of the dish. '
+        'Return ONLY valid JSON: {"image_url": "<URL or null>", "description": "<text>"}'
+    )
+    messages = [{"role": "user", "content": prompt}]
+
+    def _parse(text: str) -> dict | None:
+        text = text.strip()
+        if "```" in text:
+            parts = text.split("```")
+            for p in parts:
+                if p.startswith("json"): p = p[4:]
+                if "{" in p:
+                    text = p.strip(); break
+        m = re.search(r'\{[^{}]+\}', text, re.DOTALL)
+        if m:
+            try: return json.loads(m.group())
+            except Exception: pass
+        return None
+
+    try:
+        for _ in range(5):
+            response = client.beta.messages.create(
+                model="claude-sonnet-4-6",
+                max_tokens=1024,
+                tools=[{"type": "web_search_20250305", "name": "web_search"}],
+                messages=messages,
+                betas=["web-search-2025-03-05"],
+            )
+            if response.stop_reason == "end_turn":
+                for block in reversed(response.content):
+                    if hasattr(block, "text") and block.text.strip():
+                        result = _parse(block.text)
+                        if result: return result
+                break
+            if response.stop_reason == "tool_use":
+                messages.append({"role": "assistant", "content": response.content})
+                messages.append({"role": "user", "content": [
+                    {"type": "tool_result", "tool_use_id": b.id, "content": ""}
+                    for b in response.content if b.type == "tool_use"
+                ]})
+            else:
+                break
+    except Exception as exc:
+        print(f"[webapp] dish info enrichment failed: {exc}")
+
+    return {
+        "image_url": None,
+        "description": (
+            f"{recipe_name} is a prepared dish whose overall sensory profile emerges from "
+            "the interaction of its ingredients across the five primary taste dimensions: "
+            "sweet, bitter, salty, umami, and sour."
+        ),
+    }
+
+
 def extract_recipe(text: str) -> dict:
     client  = anthropic.Anthropic()
     message = client.messages.create(
@@ -225,6 +300,12 @@ def predict():
             else:
                 return jsonify({"error": "Unsupported file type. Use .txt, .pdf, or .docx"}), 400
 
+        elif request.form.get("url", "").strip():
+            try:
+                text = fetch_url_text(request.form["url"].strip())
+            except Exception as exc:
+                return jsonify({"error": f"Could not fetch URL: {exc}"}), 400
+
         elif request.form.get("text", "").strip():
             text = request.form["text"].strip()
 
@@ -271,10 +352,13 @@ def predict():
                 "upper": round(min(100.0, pred + rmse), 1),
             }
 
+        dish_info = enrich_with_dish_info(recipe["recipe_name"])
+
         return jsonify({
             "recipe":      recipe,
             "predictions": predictions,
             "confidence":  confidence,
+            "dish_info":   dish_info,
         })
 
     except json.JSONDecodeError as exc:
