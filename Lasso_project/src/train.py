@@ -48,15 +48,19 @@ Y_FILE      = os.path.join(PROC_DIR, "Y_train.npy")
 MODEL_FILE  = os.path.join(MODELS_DIR, "final_models.pkl")
 RESULTS_CSV = os.path.join(MODELS_DIR, "real_vs_predicted.csv")
 
-# Canonical keys & colors (fixed order)
-SENSORY_ORDER = ['sweet', 'bitter', 'salty', 'umami', 'sour']
-ALIASES = {
-    'sweetness': 'sweet', 'bitterness': 'bitter', 'sourness': 'sour',
-    'umaminess': 'umami', 'saltiness': 'salty',
-    'sweet': 'sweet', 'bitter': 'bitter', 'sour': 'sour', 'umami': 'umami', 'salty': 'salty'
-}
-COLOR_MAP = {'sweet': 'blue','bitter': 'orange','salty': 'red','umami': 'purple','sour': 'green'}
-METHOD_ORDER = ["HS", "RV", "Lasso"]
+# Import shared constants from plot_config
+from plot_config import (
+    SENSORY_ORDER, ALIASES, METHOD_ORDER, METHOD_DISPLAY,
+    SENSORY_COLORS, METHOD_COLORS, METHOD_COLORS_LIGHT,
+)
+
+# Paths for Hashin-Shtrikman and Reuss-Voigt prediction data
+HS_PRED_FILE = os.path.join(DATA_DIR, "hs_predictions.py")
+RV_PRED_FILE = os.path.join(DATA_DIR, "rv_predictions.py")
+
+# Old (legacy) plots preserved for comparison
+OLD_PLOTS_DIR = os.path.join(SRC2_RESULTS, "old_plots", "plots")
+os.makedirs(OLD_PLOTS_DIR, exist_ok=True)
 
 # ---------------- Utils & Loaders ----------------
 def load_attr_from_py(filepath, variable_name):
@@ -125,11 +129,14 @@ def extract_from_pred_data(pred_data, method_key):
                 preds.append(prd[k]); actuals.append(act[k]); labels.append(k)
     return preds, actuals, labels
 
-# ---------------- Required Plots ----------------
+# Legacy color map for old plot functions
+_LEGACY_COLOR_MAP = {'sweet': 'blue', 'bitter': 'orange', 'salty': 'red', 'umami': 'purple', 'sour': 'green'}
+
+# ---------------- Legacy Plots (saved to old_plots/) ----------------
 def _sensory_legend_handles():
     handles = []
     for k in SENSORY_ORDER:
-        h = plt.Line2D([0],[0], marker='o', linestyle='', markersize=6, label=k.capitalize(), color=COLOR_MAP[k])
+        h = plt.Line2D([0],[0], marker='o', linestyle='', markersize=6, label=k.capitalize(), color=_LEGACY_COLOR_MAP[k])
         handles.append(h)
     return handles
 
@@ -146,7 +153,7 @@ def plot_predicted_vs_actual(preds, actuals, labels, method_name, output_file):
     r_squared = r2_score(a, p) if len(p) >= 2 else np.nan
 
     plt.figure(figsize=(6.8, 6.6))
-    colors = [COLOR_MAP[lbl] for lbl in labels]
+    colors = [_LEGACY_COLOR_MAP[lbl] for lbl in labels]
     plt.scatter(p, a, c=colors, alpha=0.85, s=30, linewidths=0)
 
     # Ideal line
@@ -506,6 +513,124 @@ def predict_recipes_table(
     return rows
 
 
+# ════════════════════════════════════════════════════════════════════════
+# NEW (v2) publication-quality plotting functions -- unified plot_config
+# ════════════════════════════════════════════════════════════════════════
+
+def plot_predicted_vs_actual_v2(preds, actuals, labels, method_name, output_file):
+    """Predicted vs Actual scatter with unified styling."""
+    from plot_config import (
+        apply_style, setup_figure, save_figure, style_axes,
+        sensory_legend_handles, SENSORY_COLORS, METHOD_DISPLAY,
+        FONT_SIZE_ANNOTATION, FONT_SIZE_LEGEND,
+    )
+    if not preds or not actuals:
+        print(f"[!] No data to plot for {method_name}.")
+        return
+
+    apply_style()
+    p = np.clip(np.asarray(preds, float), 0, 100)
+    a = np.clip(np.asarray(actuals, float), 0, 100)
+    r_value, _ = pearsonr(p, a) if len(p) >= 2 else (np.nan, None)
+    r_squared = r2_score(a, p) if len(p) >= 2 else np.nan
+
+    fig, ax = setup_figure(size="single_sq")
+    style_axes(ax)
+
+    colors = [SENSORY_COLORS[lbl] for lbl in labels]
+    ax.scatter(p, a, c=colors, alpha=0.85, s=25, linewidths=0.3, edgecolors="#333333")
+
+    mn = float(min(np.min(p), np.min(a)))
+    mx = float(max(np.max(p), np.max(a)))
+    pad = (mx - mn) * 0.05 if mx > mn else 0.1
+    ax.plot([mn - pad, mx + pad], [mn - pad, mx + pad], 'k--', linewidth=0.8, label='Ideal')
+
+    display = METHOD_DISPLAY.get(method_name, method_name)
+    txt = f"PCC = {r_value:.2f}\n$R^2$ = {r_squared:.2f}"
+    ax.text(0.03, 0.97, txt, transform=ax.transAxes, va='top', ha='left',
+            fontsize=FONT_SIZE_ANNOTATION,
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray'))
+
+    handles = sensory_legend_handles(markersize=4)
+    handles.append(plt.Line2D([0], [0], color='k', linestyle='--', linewidth=0.8, label='Ideal'))
+    ax.legend(handles=handles, loc='lower right', fontsize=FONT_SIZE_LEGEND, frameon=True)
+
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title(f"{display}: Predicted vs Actual")
+
+    save_figure(fig, output_file)
+    print(f"    PCC={r_value:.3f}, R2={r_squared:.3f}")
+
+
+def plot_rmse_boxplot_v2(hs, rv, lasso, out_path):
+    """Grouped RMSE box plot with unified styling."""
+    from plot_config import (
+        apply_style, setup_figure, save_figure, style_axes,
+        METHOD_COLORS_LIGHT, METHOD_COLORS, METHOD_DISPLAY,
+        FONT_SIZE_LABEL, FONT_SIZE_TITLE, FONT_SIZE_LEGEND,
+    )
+    apply_style()
+
+    (hs_p, hs_a, hs_l) = hs
+    (rv_p, rv_a, rv_l) = rv
+    (ls_p, ls_a, ls_l) = lasso
+
+    def abs_errors(preds, actuals, labels):
+        p = np.asarray(preds, float)
+        a = np.asarray(actuals, float)
+        labs = np.asarray(labels)
+        return {k: np.abs(p[labs == k] - a[labs == k]) for k in SENSORY_ORDER}
+
+    hs_err = abs_errors(hs_p, hs_a, hs_l)
+    rv_err = abs_errors(rv_p, rv_a, rv_l)
+    ls_err = abs_errors(ls_p, ls_a, ls_l)
+
+    data, tick_labels = [], []
+    for sens in SENSORY_ORDER:
+        data.extend([
+            hs_err.get(sens, np.array([])),
+            rv_err.get(sens, np.array([])),
+            ls_err.get(sens, np.array([])),
+        ])
+        tick_labels.extend([
+            "HS\n",
+            f"RV\n{sens.capitalize()}",
+            "Lasso\n",
+        ])
+
+    fig, ax = setup_figure(size="double_wide")
+    style_axes(ax)
+
+    bp = ax.boxplot(data, patch_artist=True, widths=0.6, showfliers=False)
+    method_colors = [METHOD_COLORS_LIGHT["HS"], METHOD_COLORS_LIGHT["RV"], METHOD_COLORS_LIGHT["Lasso"]]
+    for i, box in enumerate(bp['boxes']):
+        box.set_facecolor(method_colors[i % 3])
+        box.set_alpha(0.95)
+        box.set_edgecolor('black')
+        box.set_linewidth(0.6)
+    for median in bp['medians']:
+        median.set_linewidth(1.2)
+        median.set_color('black')
+
+    ax.set_ylabel("RMSE", fontsize=FONT_SIZE_LABEL, fontweight="bold")
+    ax.set_title("Ingredient to Taste (RMSE vs Method)", fontsize=FONT_SIZE_TITLE, fontweight="bold")
+
+    positions = np.arange(1, len(tick_labels) + 1)
+    ax.set_xticks(positions)
+    ax.set_xticklabels(tick_labels, rotation=0)
+    ax.grid(True, axis='y', linestyle='--', alpha=0.3)
+
+    handles = [
+        plt.Line2D([0], [0], marker='s', linestyle='', markersize=8,
+                   color=METHOD_COLORS[m], label=METHOD_DISPLAY[m])
+        for m in METHOD_ORDER
+    ]
+    ax.legend(handles=handles, loc='upper right', frameon=True, fontsize=FONT_SIZE_LEGEND)
+
+    save_figure(fig, out_path)
+
+
 # ---------------- Main ----------------
 def main():
     print("[*] Loading processed data and raw assets...")
@@ -513,6 +638,10 @@ def main():
     Y = np.load(Y_FILE)
     raw_recipes = load_attr_from_py(RECIPE_FILE, 'raw_recipes')
     pred_data   = load_attr_from_py(PRED_FILE,   'pred_data')
+
+    # Load HS/RV from separate data files
+    hs_pred_data = load_attr_from_py(HS_PRED_FILE, 'hs_predictions')
+    rv_pred_data = load_attr_from_py(RV_PRED_FILE, 'rv_predictions')
 
     print("[*] Standardizing X for alpha tuning...")
     X_std, x_mean, x_scale = standardize_fit(X)
@@ -536,54 +665,58 @@ def main():
     # Per-recipe prediction table
     recipe_names = [r['recipe_name'] for r in raw_recipes]
     OUT_JSON = os.path.join(MODELS_DIR, "per_recipe_lasso_predictions.json")
-
     _ = predict_recipes_table(
-        models=models,
-        X=X,
-        recipe_names=recipe_names,
-        raw_recipes=raw_recipes,
-        out_json=OUT_JSON,
+        models=models, X=X, recipe_names=recipe_names,
+        raw_recipes=raw_recipes, out_json=OUT_JSON,
     )
 
     # Long/flattened CSV
     results_df = pd.DataFrame({
         'label': lasso_labels_all,
         'actual': lasso_actuals_all,
-        'predicted': lasso_preds_all
+        'predicted': lasso_preds_all,
     })
     results_df.to_csv(RESULTS_CSV, index=False)
     print(f"[+] Long-format predictions saved to: {RESULTS_CSV}")
 
-    # HS & RV from pred_data
-    hs_preds, hs_actuals, hs_labels = extract_from_pred_data(pred_data, "HS prediction")
-    rv_preds, rv_actuals, rv_labels = extract_from_pred_data(pred_data, "RV prediction")
+    # Extract HS & RV predictions from their separate data files
+    hs_preds, hs_actuals, hs_labels = extract_from_pred_data(hs_pred_data, "HS prediction")
+    rv_preds, rv_actuals, rv_labels = extract_from_pred_data(rv_pred_data, "RV prediction")
 
-    # Predicted vs Actual plots
+    # ── Legacy plots (saved to old_plots/ for comparison) ──
     plot_predicted_vs_actual(
-        hs_preds, hs_actuals, hs_labels,
-        method_name="HS",
-        output_file=os.path.join(PLOTS_DIR, "hs_predicted_vs_actual.png")
-    )
-
+        hs_preds, hs_actuals, hs_labels, method_name="HS",
+        output_file=os.path.join(OLD_PLOTS_DIR, "hs_predicted_vs_actual.png"))
     plot_predicted_vs_actual(
-        rv_preds, rv_actuals, rv_labels,
-        method_name="RV",
-        output_file=os.path.join(PLOTS_DIR, "rv_predicted_vs_actual.png")
-    )
-
+        rv_preds, rv_actuals, rv_labels, method_name="RV",
+        output_file=os.path.join(OLD_PLOTS_DIR, "rv_predicted_vs_actual.png"))
     plot_predicted_vs_actual(
         lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all,
         method_name="Lasso",
-        output_file=os.path.join(PLOTS_DIR, "lasso_predicted_vs_actual.png")
-    )
-
-    # Single RMSE box plot
+        output_file=os.path.join(OLD_PLOTS_DIR, "lasso_predicted_vs_actual.png"))
     plot_rmse_boxplot(
         hs=(hs_preds, hs_actuals, hs_labels),
         rv=(rv_preds, rv_actuals, rv_labels),
         lasso=(lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all),
-        out_path=os.path.join(PLOTS_DIR, "rmse_boxplot_all_methods.png")
-    )
+        out_path=os.path.join(OLD_PLOTS_DIR, "rmse_boxplot_all_methods.png"))
+    print("[+] Legacy plots saved to results/old_plots/plots/")
+
+    # ── New publication-quality plots (unified style) ──
+    plot_predicted_vs_actual_v2(
+        hs_preds, hs_actuals, hs_labels, method_name="HS",
+        output_file=os.path.join(PLOTS_DIR, "hs_predicted_vs_actual.png"))
+    plot_predicted_vs_actual_v2(
+        rv_preds, rv_actuals, rv_labels, method_name="RV",
+        output_file=os.path.join(PLOTS_DIR, "rv_predicted_vs_actual.png"))
+    plot_predicted_vs_actual_v2(
+        lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all,
+        method_name="Lasso",
+        output_file=os.path.join(PLOTS_DIR, "lasso_predicted_vs_actual.png"))
+    plot_rmse_boxplot_v2(
+        hs=(hs_preds, hs_actuals, hs_labels),
+        rv=(rv_preds, rv_actuals, rv_labels),
+        lasso=(lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all),
+        out_path=os.path.join(PLOTS_DIR, "rmse_boxplot_all_methods.png"))
 
     # Metrics
     dfs = []

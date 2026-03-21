@@ -2,7 +2,7 @@
 
 ## Abstract
 
-This project investigates the prediction of five sensory attributes -- sweetness, bitterness, saltiness, umami, and sourness -- from recipe ingredient compositions. We compare three prediction methods: Hyperplane Sampling (HS), Random Voting (RV), and L1-regularized (Lasso) regression trained via proximal gradient descent. The pipeline includes data preprocessing, exploratory analysis (KDE distributions, t-SNE and PCA clustering), hyperparameter tuning via leave-one-out cross-validation, and comprehensive evaluation using 12 metrics.
+This project investigates the prediction of five sensory attributes -- sweetness, bitterness, saltiness, umami, and sourness -- from recipe ingredient compositions. We compare three prediction methods: Hashin-Shtrikman (HS) bounds, Reuss-Voigt (RV) bounds, and L1-regularized (Lasso) regression trained via proximal gradient descent. The pipeline includes data preprocessing, exploratory analysis (KDE distributions, t-SNE and PCA clustering), hyperparameter tuning via leave-one-out cross-validation, and comprehensive evaluation using 12 metrics.
 
 ## Problem Statement
 
@@ -21,8 +21,8 @@ Each recipe is represented as a weighted combination of ingredient sensory vecto
 
 | Method | Description |
 |--------|-------------|
-| **HS** (Hyperplane Sampling) | Baseline geometric sampling method |
-| **RV** (Random Voting) | Ensemble-based random voting approach |
+| **HS** (Hashin-Shtrikman bounds) | Composite material bounds applied to sensory prediction |
+| **RV** (Reuss-Voigt bounds) | Parallel/series mixture bounds for sensory prediction |
 | **Lasso** | L1-regularized linear regression via proximal gradient descent with soft-thresholding |
 
 ### Lasso Implementation
@@ -82,23 +82,35 @@ raw_recipes.py (embedded dataset)
 ## Installation
 
 ```bash
-pip install -r Lasso_project/requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade "pip<25"
+python -m pip install -r Lasso_project/requirements.txt
 ```
 
-**Requirements:** Python 3.8+, NumPy, scikit-learn, Matplotlib, SciPy, pandas, seaborn, tabulate
+**Requirements:** Python 3.10 recommended. Dependencies are pinned to a known-good set, including `numpy==1.26.4`, to avoid the NumPy 2.x ABI mismatch that can break `pandas`, `scikit-learn`, `numexpr`, `bottleneck`, and `seaborn`.
 
 ## Reproducing Results
 
 ```bash
+# One-command full pipeline
+python Lasso_project/src/run_all.py
+
+# Or run each step manually
+
 # Step 1: Preprocess data
-python3 Lasso_project/src/preprocess.py
+python Lasso_project/src/preprocess.py
 
 # Step 2: Generate exploratory plots
-python3 Lasso_project/src/data_plots.py
+python Lasso_project/src/data_plots.py
 
 # Step 3: Train models and evaluate
-python3 Lasso_project/src/train.py
+python Lasso_project/src/train.py
 ```
+
+`Lasso_project/src/run_all.py` clears previous generated outputs, then runs preprocessing, plot generation, and training in order.
+
+The repository includes a GitHub Actions workflow that installs from `Lasso_project/requirements.txt` in a fresh environment and runs all three scripts on each push and pull request.
 
 ## Outputs
 
