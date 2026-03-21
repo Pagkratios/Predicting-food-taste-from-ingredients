@@ -514,8 +514,11 @@ def _find_dish_image(recipe_name: str) -> str | None:
     except Exception:
         pass
 
-    # 2. Wikipedia article thumbnail
-    candidates = [recipe_name, " ".join(recipe_name.split()[:2])]
+    # 2. Wikipedia article thumbnail — try full name, 2-word prefix, then individual words
+    _stop = {"with", "and", "the", "in", "on", "a", "of", "glazed", "roasted",
+             "grilled", "baked", "fried", "steamed", "fresh", "dried"}
+    _keywords = [w for w in recipe_name.split() if w.lower() not in _stop and len(w) > 3]
+    candidates = [recipe_name, " ".join(recipe_name.split()[:2])] + _keywords
     for candidate in candidates:
         try:
             r = requests.get(
@@ -551,15 +554,16 @@ def _find_dish_image(recipe_name: str) -> str | None:
     except Exception:
         pass
 
-    # 4. Claude web_search – last resort
+    # 4. Claude web_search – last resort (also catches CDN URLs without extensions)
     try:
         response = anthropic.Anthropic().beta.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=256,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": (
-                f'Find a direct .jpg or .png image URL showing "{recipe_name}" food. '
-                f'Return ONLY the raw image URL, nothing else.'
+                f'Find a photo of "{recipe_name}" food dish. '
+                f'Return ONLY a single direct image URL (must end in .jpg, .jpeg, .png, or .webp). '
+                f'No text, no explanation, just the URL.'
             )}],
             betas=["web-search-2025-03-05"],
         )
@@ -567,7 +571,9 @@ def _find_dish_image(recipe_name: str) -> str | None:
             block.text for block in response.content
             if hasattr(block, "text") and block.text.strip()
         ).strip()
-        m = re.search(r'https?://\S+\.(?:jpg|jpeg|png|webp)\S*', full_text, re.IGNORECASE)
+        # Try strict image extension match first, then any URL from image CDNs
+        m = (re.search(r'https?://\S+\.(?:jpg|jpeg|png|webp)(?:\?\S*)?', full_text, re.IGNORECASE)
+             or re.search(r'https?://(?:upload\.wikimedia\.org|images\.\S+|img\.\S+|cdn\.\S+|photos\.\S+)/\S+', full_text, re.IGNORECASE))
         if m:
             return m.group().rstrip('.,;)"\'')
     except Exception as exc:

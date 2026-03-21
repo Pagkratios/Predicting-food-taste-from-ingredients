@@ -318,8 +318,26 @@ function buildRecipeTable(recipe) {
 
     const tdEv = document.createElement('td');
     if (src === 'predicted' && ing.evidence) {
-      const short = ing.evidence.length > 60 ? ing.evidence.slice(0, 60) + '…' : ing.evidence;
-      tdEv.innerHTML = `<span class="evidence-text" title="${ing.evidence.replace(/"/g, '&quot;')}">${short}</span>`;
+      const ev = ing.evidence;
+      const short = ev.length > 55 ? ev.slice(0, 55) + '…' : ev;
+      // Linkify any URLs in the evidence
+      const linked = ev.replace(/(https?:\/\/[^\s,;)"']+)/g,
+        '<a href="$1" target="_blank" rel="noopener" class="evidence-link" onclick="event.stopPropagation()">↗</a>');
+      const btn = document.createElement('span');
+      btn.className = 'evidence-text';
+      btn.title = 'Click to expand';
+      btn.innerHTML = short;
+      btn.addEventListener('click', () => showEvidenceModal(ev, linked));
+      tdEv.appendChild(btn);
+      // Append link icons inline if URLs present
+      const urls = ev.match(/(https?:\/\/[^\s,;)"']+)/g) || [];
+      urls.forEach(url => {
+        const a = document.createElement('a');
+        a.href = url; a.target = '_blank'; a.rel = 'noopener';
+        a.className = 'evidence-link'; a.textContent = '↗';
+        a.addEventListener('click', e => e.stopPropagation());
+        tdEv.appendChild(a);
+      });
     } else {
       tdEv.innerHTML = `<span style="color:var(--text-dim)">—</span>`;
     }
@@ -355,6 +373,22 @@ function buildScoresTable(predictions, confidence) {
       <div class="score-values"><div class="score-main" style="color:${col}">${pred.toFixed(1)}</div><div class="score-range">${lo.toFixed(1)} – ${hi.toFixed(1)}</div></div>`;
     c.appendChild(row);
   });
+}
+
+// ── Evidence modal ─────────────────────────────────────────────────────────
+function showEvidenceModal(text, linkedHtml) {
+  let modal = document.getElementById('evidenceModal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'evidenceModal';
+    modal.className = 'ev-modal-backdrop';
+    modal.innerHTML = `<div class="ev-modal"><button class="ev-modal-close" id="evClose">×</button><div class="ev-modal-body" id="evBody"></div></div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
+    document.getElementById('evClose').addEventListener('click', () => { modal.style.display = 'none'; });
+  }
+  document.getElementById('evBody').innerHTML = linkedHtml;
+  modal.style.display = 'flex';
 }
 
 // ── Radar chart ────────────────────────────────────────────────────────────
