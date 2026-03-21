@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+
+# OS
+.DS_Store
+
+# Generated outputs (regenerable by running scripts)
+Lasso_project/results/
+Lasso_project/data/processed/
