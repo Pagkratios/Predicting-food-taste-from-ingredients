@@ -222,9 +222,8 @@ def _research_ingredient(name: str) -> dict:
         '"confidence":"High"|"Medium"|"Low","evidence":"<cited source or reasoning>"}'
     )
 
-    # Primary: single call with web search — Anthropic executes searches server-side,
-    # response comes back as end_turn with many fragmented BetaTextBlocks.
-    # Concatenate ALL text blocks then parse JSON from the combined string.
+    # Primary: Opus + web search
+    print(f"[research] '{name}' — calling claude-opus-4-6 with web_search…")
     try:
         response = anthropic.Anthropic().beta.messages.create(
             model="claude-opus-4-6",
@@ -233,18 +232,32 @@ def _research_ingredient(name: str) -> dict:
             messages=[{"role": "user", "content": prompt}],
             betas=["web-search-2025-03-05"],
         )
+        # Log every block so we can see what the model did
+        for i, block in enumerate(response.content):
+            btype = getattr(block, "type", type(block).__name__)
+            if btype == "tool_use":
+                query = getattr(block, "input", {}).get("query", "?")
+                print(f"[research]   block[{i}] web_search query: {query!r}")
+            elif btype == "tool_result":
+                print(f"[research]   block[{i}] web_search result received")
+            elif hasattr(block, "text") and block.text.strip():
+                snippet = block.text.strip()[:120].replace("\n", " ")
+                print(f"[research]   block[{i}] text: {snippet}")
+
         full_text = " ".join(
             block.text for block in response.content
             if hasattr(block, "text") and block.text.strip()
         )
         result = _parse_result(full_text)
         if result:
+            print(f"[research] '{name}' — confidence={result.get('confidence')} evidence={str(result.get('evidence',''))[:80]}")
             return result
-        print(f"[webapp] web research parse failed for '{name}', falling back")
+        print(f"[research] '{name}' — parse failed, raw text: {full_text[:200]}")
     except Exception as exc:
-        print(f"[webapp] web research for '{name}' failed: {exc}")
+        print(f"[research] '{name}' — Opus+web_search FAILED: {exc}")
 
-    # Fallback: Claude-only prediction (no web search, always succeeds)
+    # Fallback: Opus without web search
+    print(f"[research] '{name}' — falling back to claude-opus-4-6 (no web search)…")
     try:
         response = anthropic.Anthropic().beta.messages.create(
             model="claude-opus-4-6",
@@ -258,10 +271,13 @@ def _research_ingredient(name: str) -> dict:
         )
         result = _parse_result(response.content[0].text)
         if result:
+            print(f"[research] '{name}' — fallback succeeded (confidence=Low)")
             return result
+        print(f"[research] '{name}' — fallback parse also failed")
     except Exception as exc:
-        print(f"[webapp] fallback prediction for '{name}' failed: {exc}")
+        print(f"[research] '{name}' — fallback FAILED: {exc}")
 
+    print(f"[research] '{name}' — all strategies failed, using hardcoded defaults")
     return {
         "sweet": 10.0, "sour": 10.0, "bitter": 10.0, "umami": 10.0, "salty": 10.0,
         "confidence": "Low",
@@ -479,52 +495,115 @@ def _scrape_image_from_url(url: str) -> str | None:
     return None
 
 
-def _search_dish_image(recipe_name: str) -> str | None:
-    """Find a dish image via Wikipedia REST API (free, no auth, reliable)."""
+def _find_dish_image(recipe_name: str) -> str | None:
+    """
+    Multi-strategy image search. Tries in order until one succeeds:
+      1. TheMealDB  – free food API with photos, great for common dishes
+      2. Wikipedia  – article thumbnail, broad coverage
+      3. Wikimedia Commons – huge free image database
+      4. Claude web_search – last resort, scans the web for a direct image URL
+    """
     import requests
     from urllib.parse import quote_plus
-
     headers = {"User-Agent": "Mozilla/5.0 (compatible; FlavorLab/1.0)"}
 
-    # Try exact name, then first two words (e.g. "Chocolate Cake" from "Chocolate Cake with Ganache")
+    # 1. TheMealDB (food-specific, free, no key)
+    try:
+        r = requests.get(
+            f"https://www.themealdb.com/api/json/v1/1/search.php?s={quote_plus(recipe_name)}",
+            headers=headers, timeout=8
+        )
+        if r.status_code == 200:
+            meals = r.json().get("meals") or []
+            if meals and meals[0].get("strMealThumb"):
+                return meals[0]["strMealThumb"]
+    except Exception:
+        pass
+
+    # 2. Wikipedia article thumbnail
     candidates = [recipe_name, " ".join(recipe_name.split()[:2])]
     for candidate in candidates:
         try:
-            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(candidate)}"
-            resp = requests.get(url, headers=headers, timeout=8)
-            if resp.status_code == 200:
-                img = resp.json().get("thumbnail", {}).get("source")
+            r = requests.get(
+                f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(candidate)}",
+                headers=headers, timeout=8
+            )
+            if r.status_code == 200:
+                img = r.json().get("thumbnail", {}).get("source")
                 if img:
                     return img
         except Exception:
             pass
+
+    # 3. Wikimedia Commons image search
+    try:
+        r = requests.get(
+            "https://commons.wikimedia.org/w/api.php",
+            params={
+                "action": "query", "generator": "search", "gsrnamespace": "6",
+                "gsrsearch": f"food {recipe_name}", "gsrlimit": "5",
+                "prop": "imageinfo", "iiprop": "url", "iiurlwidth": "600",
+                "format": "json",
+            },
+            headers=headers, timeout=8
+        )
+        if r.status_code == 200:
+            pages = r.json().get("query", {}).get("pages", {})
+            for page in pages.values():
+                info = (page.get("imageinfo") or [{}])[0]
+                url = info.get("url", "")
+                if url and any(url.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+                    return url
+    except Exception:
+        pass
+
+    # 4. Claude web_search – last resort
+    try:
+        response = anthropic.Anthropic().beta.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=256,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": (
+                f'Find a direct .jpg or .png image URL showing "{recipe_name}" food. '
+                f'Return ONLY the raw image URL, nothing else.'
+            )}],
+            betas=["web-search-2025-03-05"],
+        )
+        full_text = " ".join(
+            block.text for block in response.content
+            if hasattr(block, "text") and block.text.strip()
+        ).strip()
+        m = re.search(r'https?://\S+\.(?:jpg|jpeg|png|webp)\S*', full_text, re.IGNORECASE)
+        if m:
+            return m.group().rstrip('.,;)"\'')
+    except Exception as exc:
+        print(f"[webapp] Claude image search failed for '{recipe_name}': {exc}")
+
     return None
 
 
 def enrich_with_dish_info(recipe_name: str, source_url: str | None = None) -> dict:
     """
     Get dish image + description.
-
-    If source_url is provided: scrape image directly from that page.
-    Otherwise: use Claude web_search to find a photo of the dish.
-    Description is always generated by Claude (no web search needed).
+    If source_url provided: scrape og:image from that page, else search for the dish.
     """
     # ── Image ──────────────────────────────────────────────────────────────
+    image_url = None
     if source_url:
         image_url = _scrape_image_from_url(source_url)
-        if not image_url:
-            # Fallback: search anyway
-            image_url = _search_dish_image(recipe_name)
-    else:
-        image_url = _search_dish_image(recipe_name)
+    if not image_url:
+        image_url = _find_dish_image(recipe_name)
 
     # ── Description (always from Claude, no web call needed) ───────────────
     try:
         msg = anthropic.Anthropic().messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=80,
+            max_tokens=160,
             messages=[{"role": "user", "content": (
-                f'Write ONE short sentence summarising what "{recipe_name}" tastes like. Plain text only.'
+                f'Write 2–3 sentences describing the sensory and flavour chemistry of "{recipe_name}" '
+                f'for a food scientist. Cover dominant taste attributes (sweet/sour/bitter/umami/salty), '
+                f'key flavour-active compounds or Maillard/fermentation reactions if relevant, '
+                f'and any notable texture or aroma interactions. Plain text only, no bullet points.'
             )}],
         )
         description = msg.content[0].text.strip()
