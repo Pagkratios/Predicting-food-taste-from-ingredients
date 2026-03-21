@@ -179,38 +179,25 @@ def _match_to_database(ingredient_names: list[str]) -> dict:
 
 def _research_ingredient(name: str) -> dict:
     """
-    Use Claude + web_search to find sensory scores for an unmatched ingredient.
+    Use Claude Opus + web_search to find sensory scores for an unmatched ingredient.
+    Single call — Anthropic handles tool execution server-side.
 
     Always returns a dict with scores and one of three confidence levels:
-      High   – solid cited scientific evidence
-      Medium – scattered sources, reasonable estimate
-      Low    – little/no sources, predicted from model knowledge
+      High   – direct measurement from a cited paper or database
+      Medium – indirect/related sources; reasoned estimate
+      Low    – no sources; predicted from food science knowledge
     """
-    client = anthropic.Anthropic()
-    prompt = (
-        f'Search for the sensory taste profile of "{name}" using scientific sources.\n\n'
-        "Look for peer-reviewed food science papers, official food databases (e.g. Wageningen SVT, "
-        "USDA, Flavor DB, Nizo), or validated sensory studies. Find Spectrum™ scale scores (0–100) "
-        "for: sweet, sour, bitter, umami, salty.\n\n"
-        "Confidence rules:\n"
-        "HIGH   — direct measurement found in a cited paper or database (include DOI or URL)\n"
-        "MEDIUM — indirect/related sources; estimate with reasoning\n"
-        "LOW    — no sources found; predict from food science knowledge\n\n"
-        "You MUST always return numeric scores. Never refuse.\n"
-        "evidence field: cite the actual source with author, year, and DOI/URL if available.\n\n"
-        "Return ONLY this JSON (no markdown):\n"
-        '{"sweet":<0-100>,"sour":<0-100>,"bitter":<0-100>,"umami":<0-100>,"salty":<0-100>,'
-        '"confidence":"High"|"Medium"|"Low","evidence":"<cited source or reasoning>"}'
-    )
-    messages = [{"role": "user", "content": prompt}]
-
     def _parse_result(text: str) -> dict | None:
         text = text.strip()
-        if text.startswith("```"):
+        if "```" in text:
             text = text.split("```")[1]
             if text.lower().startswith("json"):
                 text = text[4:]
             text = text.strip()
+        # Extract JSON object (may be embedded in prose)
+        m = re.search(r'\{[^{}]*"sweet"[^{}]*\}', text, re.DOTALL)
+        if m:
+            text = m.group()
         try:
             result = json.loads(text)
             if all(k in result for k in ("sweet", "sour", "bitter", "umami", "salty", "confidence")):
@@ -219,36 +206,42 @@ def _research_ingredient(name: str) -> dict:
             pass
         return None
 
+    prompt = (
+        f'Search for the sensory taste profile of "{name}" using scientific sources.\n\n'
+        "Look for peer-reviewed food science papers, official food databases (Wageningen SVT, "
+        "USDA, FlavorDB, Nizo), or validated sensory studies reporting Spectrum™ scale scores "
+        "(0–100) for: sweet, sour, bitter, umami, salty.\n\n"
+        "Confidence rules:\n"
+        "High   — direct measurement from a cited paper or database (include DOI/URL)\n"
+        "Medium — indirect or related sources; estimate with reasoning\n"
+        "Low    — no sources found; predict from food science knowledge\n\n"
+        "You MUST always return numeric scores. Never refuse.\n"
+        "evidence: cite the actual source with author, year, DOI/URL if available.\n\n"
+        "Return ONLY this JSON (no markdown, no extra text):\n"
+        '{"sweet":<0-100>,"sour":<0-100>,"bitter":<0-100>,"umami":<0-100>,"salty":<0-100>,'
+        '"confidence":"High"|"Medium"|"Low","evidence":"<cited source or reasoning>"}'
+    )
+
+    # Primary: single call with web search — Anthropic executes the tool server-side
     try:
-        for _ in range(6):
-            response = client.beta.messages.create(
-                model="claude-opus-4-6",
-                max_tokens=1024,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=messages,
-                betas=["web-search-2025-03-05"],
-            )
-            if response.stop_reason == "end_turn":
-                for block in reversed(response.content):
-                    if hasattr(block, "text") and block.text.strip():
-                        result = _parse_result(block.text)
-                        if result:
-                            return result
-                break
-            if response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": [
-                    {"type": "tool_result", "tool_use_id": b.id, "content": ""}
-                    for b in response.content if b.type == "tool_use"
-                ]})
-            else:
-                break
+        response = anthropic.Anthropic().messages.create(
+            model="claude-opus-4-6",
+            max_tokens=1024,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}],
+            betas=["web-search-2025-03-05"],
+        )
+        for block in reversed(response.content):
+            if hasattr(block, "text") and block.text.strip():
+                result = _parse_result(block.text)
+                if result:
+                    return result
     except Exception as exc:
         print(f"[webapp] web research for '{name}' failed: {exc}")
 
-    # Fallback: ask Claude without web search (always succeeds)
+    # Fallback: Claude-only prediction (no web search, always succeeds)
     try:
-        fallback = anthropic.Anthropic().messages.create(
+        response = anthropic.Anthropic().messages.create(
             model="claude-opus-4-6",
             max_tokens=512,
             messages=[{"role": "user", "content": (
@@ -258,13 +251,12 @@ def _research_ingredient(name: str) -> dict:
                 '"evidence":"Predicted from model knowledge, no reliable sources found"}'
             )}],
         )
-        result = _parse_result(fallback.content[0].text)
+        result = _parse_result(response.content[0].text)
         if result:
             return result
     except Exception as exc:
         print(f"[webapp] fallback prediction for '{name}' failed: {exc}")
 
-    # Hard fallback – neutral scores
     return {
         "sweet": 10.0, "sour": 10.0, "bitter": 10.0, "umami": 10.0, "salty": 10.0,
         "confidence": "Low",
@@ -483,54 +475,54 @@ def _scrape_image_from_url(url: str) -> str | None:
 
 
 def _search_dish_image(recipe_name: str) -> str | None:
-    """Use Claude + web_search to find a dish image URL."""
-    client = anthropic.Anthropic()
-    prompt = (
-        f'Search the web for a photo of the dish "{recipe_name}". '
-        'Find a direct image URL ending in .jpg, .png, or .webp from a reputable food or recipe site. '
-        'Return ONLY valid JSON: {"image_url": "<URL or null>"}'
-    )
-    messages = [{"role": "user", "content": prompt}]
+    """
+    Find a dish image by scraping a known recipe site search page.
+    Tries DuckDuckGo image search, then falls back to scraping a Google-linked page.
+    No API key required.
+    """
+    import requests
+    from bs4 import BeautifulSoup
+    from urllib.parse import quote_plus
 
-    def _parse(text: str) -> str | None:
-        text = text.strip()
-        if "```" in text:
-            parts = text.split("```")
-            for p in parts:
-                if p.startswith("json"): p = p[4:]
-                if "{" in p: text = p.strip(); break
-        m = re.search(r'\{[^{}]*"image_url"\s*:\s*"([^"]+)"[^{}]*\}', text)
-        if m:
-            val = m.group(1)
-            return val if val.lower() != "null" else None
-        return None
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; FlavorLab/1.0)"}
+    query = quote_plus(f"{recipe_name} recipe")
 
+    # Try: scrape the first AllRecipes/BBC Food result for its og:image
+    search_urls = [
+        f"https://www.allrecipes.com/search?q={query}",
+        f"https://www.bbcgoodfood.com/search?q={query}",
+    ]
+    for search_url in search_urls:
+        try:
+            resp = requests.get(search_url, headers=headers, timeout=10)
+            soup = BeautifulSoup(resp.text, "html.parser")
+            # Find the first recipe card link
+            link = soup.find("a", href=re.compile(r"/recipe/"))
+            if not link:
+                continue
+            href = link["href"]
+            if not href.startswith("http"):
+                from urllib.parse import urlparse
+                p = urlparse(search_url)
+                href = f"{p.scheme}://{p.netloc}{href}"
+            img = _scrape_image_from_url(href)
+            if img:
+                return img
+        except Exception as exc:
+            print(f"[webapp] image search on {search_url} failed: {exc}")
+
+    # Last resort: Wikimedia Commons thumbnail via API (no auth needed)
     try:
-        for _ in range(5):
-            response = client.beta.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=512,
-                tools=[{"type": "web_search_20250305", "name": "web_search"}],
-                messages=messages,
-                betas=["web-search-2025-03-05"],
-            )
-            if response.stop_reason == "end_turn":
-                for block in reversed(response.content):
-                    if hasattr(block, "text") and block.text.strip():
-                        result = _parse(block.text)
-                        if result:
-                            return result
-                break
-            if response.stop_reason == "tool_use":
-                messages.append({"role": "assistant", "content": response.content})
-                messages.append({"role": "user", "content": [
-                    {"type": "tool_result", "tool_use_id": b.id, "content": ""}
-                    for b in response.content if b.type == "tool_use"
-                ]})
-            else:
-                break
-    except Exception as exc:
-        print(f"[webapp] dish image search failed: {exc}")
+        title = recipe_name.replace(" ", "_")
+        api = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote_plus(recipe_name)}"
+        resp = requests.get(api, headers=headers, timeout=8)
+        data = resp.json()
+        img = data.get("thumbnail", {}).get("source")
+        if img:
+            return img
+    except Exception:
+        pass
+
     return None
 
 
