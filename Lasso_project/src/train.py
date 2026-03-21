@@ -27,6 +27,7 @@ from sklearn.metrics import (
 from scipy.stats import pearsonr, spearmanr
 
 from lasso import LassoRegressor
+from env_config import get_raw_recipes_path
 
 # ---------------- Config & Paths ----------------
 PROJECT_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -41,7 +42,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(PLOTS_DIR, exist_ok=True)
 os.makedirs(METRICS_DIR, exist_ok=True)
 
-RECIPE_FILE = os.path.join(DATA_DIR, "raw_recipes.py")
+RECIPE_FILE = get_raw_recipes_path()
 PRED_FILE   = os.path.join(DATA_DIR, "data_predictions.py")
 X_FILE      = os.path.join(PROC_DIR, "X_train.npy")
 Y_FILE      = os.path.join(PROC_DIR, "Y_train.npy")
@@ -57,10 +58,6 @@ from plot_config import (
 # Paths for Hashin-Shtrikman and Reuss-Voigt prediction data
 HS_PRED_FILE = os.path.join(DATA_DIR, "hs_predictions.py")
 RV_PRED_FILE = os.path.join(DATA_DIR, "rv_predictions.py")
-
-# Old (legacy) plots preserved for comparison
-OLD_PLOTS_DIR = os.path.join(SRC2_RESULTS, "old_plots", "plots")
-os.makedirs(OLD_PLOTS_DIR, exist_ok=True)
 
 # ---------------- Utils & Loaders ----------------
 def load_attr_from_py(filepath, variable_name):
@@ -128,137 +125,6 @@ def extract_from_pred_data(pred_data, method_key):
             if k in act and k in prd:
                 preds.append(prd[k]); actuals.append(act[k]); labels.append(k)
     return preds, actuals, labels
-
-# Legacy color map for old plot functions
-_LEGACY_COLOR_MAP = {'sweet': 'blue', 'bitter': 'orange', 'salty': 'red', 'umami': 'purple', 'sour': 'green'}
-
-# ---------------- Legacy Plots (saved to old_plots/) ----------------
-def _sensory_legend_handles():
-    handles = []
-    for k in SENSORY_ORDER:
-        h = plt.Line2D([0],[0], marker='o', linestyle='', markersize=6, label=k.capitalize(), color=_LEGACY_COLOR_MAP[k])
-        handles.append(h)
-    return handles
-
-def plot_predicted_vs_actual(preds, actuals, labels, method_name, output_file):
-    if not preds or not actuals:
-        print(f"[!] No data to plot for {method_name}.")
-        return
-
-    # Convert to arrays and clip to [0, 100] to avoid axis blowouts
-    p = np.clip(np.asarray(preds, float), 0, 100)
-    a = np.clip(np.asarray(actuals, float), 0, 100)
-
-    r_value, _ = pearsonr(p, a) if len(p) >= 2 else (np.nan, None)
-    r_squared = r2_score(a, p) if len(p) >= 2 else np.nan
-
-    plt.figure(figsize=(6.8, 6.6))
-    colors = [_LEGACY_COLOR_MAP[lbl] for lbl in labels]
-    plt.scatter(p, a, c=colors, alpha=0.85, s=30, linewidths=0)
-
-    # Ideal line
-    mn = float(min(np.min(p), np.min(a)))
-    mx = float(max(np.max(p), np.max(a)))
-    pad = (mx - mn) * 0.05 if mx > mn else 0.1
-    plt.plot([mn - pad, mx + pad], [mn - pad, mx + pad], 'k--', linewidth=1, label='Ideal')
-
-    # Text at top-left
-    txt = f"PCC = {r_value:.2f}\n$R^2$ = {r_squared:.2f}"
-    plt.gca().text(
-        0.02, 0.98, txt, transform=plt.gca().transAxes,
-        va='top', ha='left', fontsize=17,
-        bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.7, edgecolor='gray')
-    )
-
-    # Legend bottom-right
-    handles = _sensory_legend_handles()
-    plt.legend(
-        handles=handles + [plt.Line2D([0],[0], color='k', linestyle='--', label='Ideal')],
-        loc='lower right', fontsize=15, frameon=True
-    )
-
-    plt.xlabel("Predicted")
-    plt.ylabel("Actual")
-    plt.title(f"{method_name}: Predicted vs Actual")
-    plt.grid(True, linestyle='--', alpha=0.35)
-    plt.tight_layout()
-    plt.savefig(output_file, bbox_inches="tight", pad_inches=0.05, dpi=300)
-    plt.close()
-    print(f"[+] Saved: {output_file} | PCC={r_value:.3f}, R2={r_squared:.3f}")
-
-def plot_rmse_boxplot(hs, rv, lasso, out_path):
-    """
-    Publication-style grouped RMSE box plot.
-    X-axis shows HS, RV, Lasso for each sensory group, with the sensory label
-    centered under the trio.
-    """
-    # Unpack
-    (hs_p, hs_a, hs_l) = hs
-    (rv_p, rv_a, rv_l) = rv
-    (ls_p, ls_a, ls_l) = lasso
-
-    def abs_errors(preds, actuals, labels):
-        p = np.asarray(preds, float)
-        a = np.asarray(actuals, float)
-        labs = np.asarray(labels)
-        return {k: np.abs(p[labs == k] - a[labs == k]) for k in SENSORY_ORDER}
-
-    hs_err = abs_errors(hs_p, hs_a, hs_l)
-    rv_err = abs_errors(rv_p, rv_a, rv_l)
-    ls_err = abs_errors(ls_p, ls_a, ls_l)
-
-    # Prepare data & labels
-    data = []
-    tick_labels = []
-    for sens in SENSORY_ORDER:
-        data.extend([
-            hs_err.get(sens, np.array([])),
-            rv_err.get(sens, np.array([])),
-            ls_err.get(sens, np.array([]))
-        ])
-        tick_labels.extend([
-            "HS\n",                     # left box
-            f"RV\n{sens.capitalize()}", # center box with sensory label
-            "Lasso\n"                   # right box
-        ])
-
-    plt.figure(figsize=(14, 6))
-    bp = plt.boxplot(data, patch_artist=True, widths=0.6, showfliers=False)
-
-    method_colors = ['#9ecae1', '#a1d99b', '#fdae6b']  # HS, RV, Lasso
-    for i, box in enumerate(bp['boxes']):
-        box.set_facecolor(method_colors[i % 3])
-        box.set_alpha(0.95)
-        box.set_edgecolor('black')
-
-    for median in bp['medians']:
-        median.set_linewidth(1.8)
-        median.set_color('black')
-
-    plt.ylabel("RMSE", fontsize=16, fontweight="bold")
-    plt.title("Ingredient to Taste (RMSE vs Method)", fontsize=18, fontweight="bold", pad=20)
-
-    positions = np.arange(1, len(tick_labels) + 1)
-    plt.xticks(ticks=positions, labels=tick_labels, fontsize=20, fontweight="medium", rotation=0)
-    plt.yticks(fontsize=20, fontweight="medium")
-
-    plt.grid(True, axis='y', linestyle='--', alpha=0.35)
-
-    handles = [
-        plt.Line2D([0],[0], marker='s', linestyle='', markersize=12,
-                   color=method_colors[0], label='HS'),
-        plt.Line2D([0],[0], marker='s', linestyle='', markersize=12,
-                   color=method_colors[1], label='RV'),
-        plt.Line2D([0],[0], marker='s', linestyle='', markersize=12,
-                   color=method_colors[2], label='Lasso'),
-    ]
-    plt.legend(handles=handles, loc='upper right', frameon=True,
-               fontsize=13, title_fontsize=14)
-
-    plt.tight_layout()
-    plt.savefig(out_path, bbox_inches="tight", pad_inches=0.1, dpi=400)
-    plt.close()
-    print(f"[+] Saved RMSE box plot: {out_path}")
 
 # ---------------- Metrics ----------------
 def _safe_mape(a, p, eps=1e-8):
@@ -520,7 +386,7 @@ def predict_recipes_table(
 def plot_predicted_vs_actual_v2(preds, actuals, labels, method_name, output_file):
     """Predicted vs Actual scatter with unified styling."""
     from plot_config import (
-        apply_style, setup_figure, save_figure, style_axes,
+        apply_style, setup_figure, save_figure_fixed, style_axes,
         sensory_legend_handles, SENSORY_COLORS, METHOD_DISPLAY,
         FONT_SIZE_ANNOTATION, FONT_SIZE_LEGEND,
     )
@@ -540,12 +406,8 @@ def plot_predicted_vs_actual_v2(preds, actuals, labels, method_name, output_file
     colors = [SENSORY_COLORS[lbl] for lbl in labels]
     ax.scatter(p, a, c=colors, alpha=0.85, s=25, linewidths=0.3, edgecolors="#333333")
 
-    mn = float(min(np.min(p), np.min(a)))
-    mx = float(max(np.max(p), np.max(a)))
-    pad = (mx - mn) * 0.05 if mx > mn else 0.1
-    ax.plot([mn - pad, mx + pad], [mn - pad, mx + pad], 'k--', linewidth=0.8, label='Ideal')
+    ax.plot([0, 100], [0, 100], 'k--', linewidth=0.8, label='Ideal')
 
-    display = METHOD_DISPLAY.get(method_name, method_name)
     txt = f"PCC = {r_value:.2f}\n$R^2$ = {r_squared:.2f}"
     ax.text(0.03, 0.97, txt, transform=ax.transAxes, va='top', ha='left',
             fontsize=FONT_SIZE_ANNOTATION,
@@ -555,11 +417,14 @@ def plot_predicted_vs_actual_v2(preds, actuals, labels, method_name, output_file
     handles.append(plt.Line2D([0], [0], color='k', linestyle='--', linewidth=0.8, label='Ideal'))
     ax.legend(handles=handles, loc='lower right', fontsize=FONT_SIZE_LEGEND, frameon=True)
 
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
+    ax.set_aspect('equal', adjustable='box')
     ax.set_xlabel("Predicted")
     ax.set_ylabel("Actual")
-    ax.set_title(f"{display}: Predicted vs Actual")
+    ax.set_title(f"Predicted vs Actual ({method_name})")
 
-    save_figure(fig, output_file)
+    save_figure_fixed(fig, output_file)
     print(f"    PCC={r_value:.3f}, R2={r_squared:.3f}")
 
 
@@ -682,24 +547,6 @@ def main():
     # Extract HS & RV predictions from their separate data files
     hs_preds, hs_actuals, hs_labels = extract_from_pred_data(hs_pred_data, "HS prediction")
     rv_preds, rv_actuals, rv_labels = extract_from_pred_data(rv_pred_data, "RV prediction")
-
-    # ── Legacy plots (saved to old_plots/ for comparison) ──
-    plot_predicted_vs_actual(
-        hs_preds, hs_actuals, hs_labels, method_name="HS",
-        output_file=os.path.join(OLD_PLOTS_DIR, "hs_predicted_vs_actual.png"))
-    plot_predicted_vs_actual(
-        rv_preds, rv_actuals, rv_labels, method_name="RV",
-        output_file=os.path.join(OLD_PLOTS_DIR, "rv_predicted_vs_actual.png"))
-    plot_predicted_vs_actual(
-        lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all,
-        method_name="Lasso",
-        output_file=os.path.join(OLD_PLOTS_DIR, "lasso_predicted_vs_actual.png"))
-    plot_rmse_boxplot(
-        hs=(hs_preds, hs_actuals, hs_labels),
-        rv=(rv_preds, rv_actuals, rv_labels),
-        lasso=(lasso_preds_all.tolist(), lasso_actuals_all.tolist(), lasso_labels_all),
-        out_path=os.path.join(OLD_PLOTS_DIR, "rmse_boxplot_all_methods.png"))
-    print("[+] Legacy plots saved to results/old_plots/plots/")
 
     # ── New publication-quality plots (unified style) ──
     plot_predicted_vs_actual_v2(

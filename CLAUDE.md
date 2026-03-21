@@ -17,6 +17,9 @@ Requires Python 3.8+.
 All scripts are run from the repo root:
 
 ```bash
+# Optional: standalone HS/RV bounds export
+python3 Bounds_project/src/compute_bounds.py
+
 # 1. Preprocess raw data into feature/target matrices
 python3 Lasso_project/src/preprocess.py
 
@@ -25,14 +28,27 @@ python3 Lasso_project/src/data_plots.py
 
 # 3. Train models and produce evaluation plots/metrics
 python3 Lasso_project/src/train.py
+
+# Selective plot regeneration without retraining
+python3 Lasso_project/src/data_plots.py --only gaussians combined
+python3 Lasso_project/src/data_plots.py --only pca tsne
+python3 Lasso_project/src/run_all.py --steps plots --plot-groups gaussians combined
 ```
 
 ## Project Structure
 
 ```
+Bounds_project/
+  hs_predictions.py       # Generated HS bounds export
+  rv_predictions.py       # Generated RV bounds export
+  bounds_predictions.json # Canonical JSON export with both bound families
+  src/
+    compute_bounds.py     # Standalone HS/RV computation pipeline
+    env_config.py         # RAW_RECIPES_PATH loader for Bounds_project
+
 Lasso_project/
   data/
-    raw_recipes.py         # Embedded dataset (29 recipes with ingredients + sensory scores)
+    raw_recipes.py         # Default dataset; active path comes from RAW_RECIPES_PATH in .env
     data_predictions.py    # Lasso predictions per recipe (updated by train.py)
     hs_predictions.py      # Pre-computed Hashin-Shtrikman (HS) bounds predictions
     rv_predictions.py      # Pre-computed Reuss-Voigt (RV) bounds predictions
@@ -49,7 +65,6 @@ Lasso_project/
     plots/                 # Predicted vs Actual scatter, RMSE boxplot
     models/                # Trained models (.pkl), predictions (.json, .csv)
     metrics/               # Per-method and combined metric tables (.csv, .md, .tex)
-    old_plots/             # Legacy plots for comparison (do not use for publications)
   data/processed/          # Preprocessed .npy arrays (gitignored)
   requirements.txt
 ```
@@ -63,7 +78,7 @@ Lasso_project/
 
 ## Data Format
 
-Recipes are embedded in `raw_recipes.py` as a Python list of dicts:
+The active raw recipe file is configured by `RAW_RECIPES_PATH` in `.env`. It should point to a Python file that exposes `raw_recipes` as a list of dicts:
 
 ```python
 {
@@ -106,11 +121,13 @@ save_figure(fig, "path/to/output.png")
 ### Output Directories
 
 - `results/{plots_data,t-sne,pca,plots}/` -- new styled plots (publication-ready)
-- `results/old_plots/` -- legacy plots preserved for comparison
 
 ## Notes
 
 - All generated outputs under `Lasso_project/results/` and `Lasso_project/data/processed/` are gitignored. Re-run the scripts to regenerate.
+- `Bounds_project/src/compute_bounds.py` is intentionally separate from the Lasso pipeline and writes its own HS/RV exports under `Bounds_project/`.
+- `data_plots.py` supports `--only` so you can regenerate just selected plot groups without touching trained artifacts.
+- `run_all.py` supports `--steps`, `--plot-groups`, and optional `--clean` for selective reruns.
 - `train.py` writes Lasso predictions back into `data_predictions.py`.
 - HS and RV predictions are loaded from separate files (`hs_predictions.py`, `rv_predictions.py`), not computed in this code.
 - The custom Lasso in `lasso.py` uses soft-thresholding (proximal operator) after each gradient step.

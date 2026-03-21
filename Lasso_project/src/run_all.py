@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Master runner: clean slate -> preprocess -> EDA plots -> train + evaluate.
+Master runner for selective pipeline execution.
 
 Usage:
     python3 Lasso_project/src/run_all.py
+    python3 Lasso_project/src/run_all.py --steps plots --plot-groups gaussians combined
+    python3 Lasso_project/src/run_all.py --steps train
+    python3 Lasso_project/src/run_all.py --steps preprocess plots train --clean
 """
 
+import argparse
 import os
 import shutil
 import subprocess
@@ -18,11 +22,11 @@ SRC_DIR = os.path.join(PROJECT_ROOT, "src")
 RESULTS_DIR = os.path.join(PROJECT_ROOT, "results")
 PROCESSED_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 
-STEPS = [
-    ("Preprocess", "preprocess.py"),
-    ("EDA Plots", "data_plots.py"),
-    ("Train & Evaluate", "train.py"),
-]
+STEP_MAP = {
+    "preprocess": ("Preprocess", "preprocess.py"),
+    "plots": ("EDA Plots", "data_plots.py"),
+    "train": ("Train & Evaluate", "train.py"),
+}
 
 
 def wipe_outputs():
@@ -34,7 +38,32 @@ def wipe_outputs():
     print()
 
 
-def run_step(name, script):
+def parse_args():
+    """Parse command-line options for selective pipeline execution."""
+    parser = argparse.ArgumentParser(description="Run selected Recipe Formulation pipeline steps.")
+    parser.add_argument(
+        "--steps",
+        nargs="+",
+        choices=list(STEP_MAP.keys()),
+        default=list(STEP_MAP.keys()),
+        help="Pipeline steps to run. Default: preprocess plots train",
+    )
+    parser.add_argument(
+        "--plot-groups",
+        nargs="+",
+        choices=["all", "ingredient_usage", "gaussians", "combined", "pca", "tsne", "clusters"],
+        default=None,
+        help="Forward selective plot groups to data_plots.py when plots is included.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove generated outputs before running selected steps.",
+    )
+    return parser.parse_args()
+
+
+def run_step(name, script, extra_args=None):
     """Run a single pipeline step and abort on failure."""
     script_path = os.path.join(SRC_DIR, script)
     print(f"{'─' * 60}")
@@ -42,8 +71,11 @@ def run_step(name, script):
     print(f"{'─' * 60}")
 
     t0 = time.time()
+    cmd = [sys.executable, script_path]
+    if extra_args:
+        cmd.extend(extra_args)
     result = subprocess.run(
-        [sys.executable, script_path],
+        cmd,
         cwd=os.path.dirname(PROJECT_ROOT),
     )
     elapsed = time.time() - t0
@@ -56,17 +88,25 @@ def run_step(name, script):
 
 
 def main():
+    args = parse_args()
+
     print("=" * 60)
-    print("  Recipe Formulation - Full Pipeline")
+    print("  Recipe Formulation - Pipeline Runner")
     print("=" * 60)
     print()
 
-    print("[1/4] Cleaning previous outputs...")
-    wipe_outputs()
+    if args.clean:
+        print("[1/?] Cleaning selected output roots...")
+        wipe_outputs()
 
-    for i, (name, script) in enumerate(STEPS, start=2):
-        print(f"[{i}/{len(STEPS) + 1}] {name}")
-        run_step(name, script)
+    total_steps = len(args.steps)
+    for i, step_key in enumerate(args.steps, start=1):
+        name, script = STEP_MAP[step_key]
+        print(f"[{i}/{total_steps}] {name}")
+        extra_args = []
+        if step_key == "plots" and args.plot_groups:
+            extra_args.extend(["--only", *args.plot_groups])
+        run_step(name, script, extra_args=extra_args)
 
     print("=" * 60)
     print("  All done. Results in Lasso_project/results/")

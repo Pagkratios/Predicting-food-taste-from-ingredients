@@ -51,7 +51,7 @@ Hyperparameter `alpha` is selected per sensory target via leave-one-out cross-va
 ## Pipeline
 
 ```
-raw_recipes.py (embedded dataset)
+RAW_RECIPES_PATH from .env
         |
         v
   preprocess.py
@@ -64,7 +64,7 @@ raw_recipes.py (embedded dataset)
   data_plots.py (exploratory analysis)
     - Ingredient usage pie chart
     - Per-sensory KDE + Gaussian fit (5 plots)
-    - Combined distribution (excluding sour)
+    - Combined distribution (excluding bitter)
     - PCA clustering (silhouette, scatter, PC1 loadings)
     - t-SNE clustering (silhouette, scatter, p-values)
         |
@@ -93,8 +93,11 @@ python -m pip install -r Lasso_project/requirements.txt
 ## Reproducing Results
 
 ```bash
+# Standalone HS/RV bounds generation
+python Bounds_project/src/compute_bounds.py
+
 # One-command full pipeline
-python Lasso_project/src/run_all.py
+python Lasso_project/src/run_all.py --clean
 
 # Or run each step manually
 
@@ -106,9 +109,47 @@ python Lasso_project/src/data_plots.py
 
 # Step 3: Train models and evaluate
 python Lasso_project/src/train.py
+
+# Only regenerate Gaussian plots + combined distributions
+python Lasso_project/src/data_plots.py --only gaussians combined
+
+# Only regenerate PCA and t-SNE outputs
+python Lasso_project/src/data_plots.py --only pca tsne
+
+# Through the master runner, without retraining or cleaning everything
+python Lasso_project/src/run_all.py --steps plots --plot-groups gaussians combined
+python Lasso_project/src/run_all.py --steps plots --plot-groups pca tsne
+python Lasso_project/src/run_all.py --steps train
 ```
 
-`Lasso_project/src/run_all.py` clears previous generated outputs, then runs preprocessing, plot generation, and training in order.
+`Lasso_project/src/run_all.py` now supports selective execution. It only removes generated outputs when you pass `--clean`.
+
+## Standalone Bounds Pipeline
+
+`Bounds_project/src/compute_bounds.py` is a separate process from the Lasso pipeline. It resolves the dataset through the same `RAW_RECIPES_PATH` value in `.env` and computes:
+
+- Reuss lower bounds
+- Voigt weighted-mixture predictions
+- Hashin-Shtrikman lower and upper bounds
+- Per-dimension absolute and squared errors against `food_sensory_scores`
+
+Outputs are written to:
+
+- `Bounds_project/hs_predictions.py`
+- `Bounds_project/rv_predictions.py`
+- `Bounds_project/bounds_predictions.json`
+
+For recipes with more than two ingredients, the HS implementation uses a documented two-phase approximation based on the total normalized weight at the minimum and maximum ingredient sensory values.
+
+Dataset path configuration:
+
+```bash
+cp .env.example .env
+```
+
+Set `RAW_RECIPES_PATH` in `.env` to either:
+- a repo-relative path such as `Lasso_project/data/raw_recipes.py`
+- or an absolute path to another `raw_recipes.py` file
 
 The repository includes a GitHub Actions workflow that installs from `Lasso_project/requirements.txt` in a fresh environment and runs all three scripts on each push and pull request.
 
@@ -121,7 +162,8 @@ All outputs are generated under `Lasso_project/results/`:
 |------|-------------|
 | `ingredient_usage.png` | Pie chart of ingredients appearing in >= 3 recipes |
 | `gaussian_<key>.png` | KDE + Gaussian fit per sensory attribute with top-3 outlier annotations |
-| `combined_distribution.png` | Pooled KDE across sweet, bitter, salty, umami |
+| `combined_distribution.png` | Pooled KDE across sweet, sour, salty, umami (without bitter) |
+| `combined_distribution_with_bitter.png` | Pooled KDE across all five sensory attributes |
 
 ### Clustering (`results/pca/` and `results/t-sne/`)
 | File | Description |
@@ -178,10 +220,17 @@ Recipe_formulation/
   README.md
   CLAUDE.md
   .gitignore
+  Bounds_project/
+    hs_predictions.py        # Generated HS export
+    rv_predictions.py        # Generated RV export
+    bounds_predictions.json  # Canonical JSON export
+    src/
+      compute_bounds.py      # Standalone HS/RV bounds generator
+      env_config.py          # RAW_RECIPES_PATH resolution for Bounds_project
   Lasso_project/
     requirements.txt
     data/
-      raw_recipes.py          # Embedded recipe dataset
+      raw_recipes.py          # Default recipe dataset; active file is selected via .env
       data_predictions.py     # HS/RV/Lasso predictions (updated by train.py)
     src/
       preprocess.py           # Data preprocessing pipeline

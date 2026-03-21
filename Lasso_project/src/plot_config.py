@@ -163,6 +163,19 @@ def save_figure(fig, path, dpi=None, transparent=False):
     print(f"[+] Saved: {path}")
 
 
+def save_figure_fixed(fig, path, dpi=None, transparent=False):
+    """Save figure at its declared canvas size without tight cropping."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    fig.savefig(
+        path,
+        dpi=dpi or SAVE_DPI,
+        transparent=transparent,
+        facecolor="white" if not transparent else "none",
+    )
+    plt.close(fig)
+    print(f"[+] Saved: {path}")
+
+
 def style_axes(ax, grid=True):
     """Apply consistent axes styling."""
     ax.tick_params(direction="out", width=0.8, length=4)

@@ -4,6 +4,7 @@ import os
 import importlib.util
 import numpy as np
 from sklearn.preprocessing import StandardScaler
+from env_config import get_raw_recipes_path
 
 # --- Reproducibility ---
 SEED = 42
@@ -13,7 +14,6 @@ SENSORY_KEYS = ['sweet', 'bitter', 'sour', 'umami', 'salty']
 
 # Paths
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
-RAW_DATA_PATH = os.path.join(PROJECT_ROOT, "data", "raw_recipes.py")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "processed")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -66,8 +66,9 @@ def standardize_features(X):
 
 
 def main():
-    print(f"[INFO] Loading raw recipes from: {RAW_DATA_PATH}")
-    raw_recipes = load_raw_recipes(RAW_DATA_PATH)
+    raw_data_path = get_raw_recipes_path()
+    print(f"[INFO] Loading raw recipes from: {raw_data_path}")
+    raw_recipes = load_raw_recipes(raw_data_path)
 
     X_list, Y_list = [], []
     for recipe in raw_recipes:
