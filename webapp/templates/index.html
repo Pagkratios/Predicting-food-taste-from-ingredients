@@ -73,12 +73,14 @@
     <!-- Pane: text -->
     <div class="tab-pane active" id="pane-text" role="tabpanel">
       <textarea id="recipeText" class="recipe-textarea"
-        placeholder="Describe your recipe — list ingredients with weights and sensory scores (0–100).
+        placeholder="Describe your recipe — list ingredients with amounts or proportions.
 
 Example:
   Bread and butter sandwich
-  - Toast (75 g): sweet 3, sour 1, bitter 1, umami 0, salty 9
-  - Unsalted butter (25 g): sweet 3, sour 1, bitter 0, umami 1, salty 4"
+  - Toast (75 g)
+  - Unsalted butter (25 g)
+
+Sensory scores are looked up automatically from our database."
         aria-label="Recipe description"></textarea>
       <p style="font-size:12px;color:var(--text-dim);margin-top:8px">
         Tip: press <kbd>⌘ Enter</kbd> to analyse
@@ -92,9 +94,8 @@ Example:
           placeholder="https://www.example.com/recipes/chocolate-cake"
           aria-label="Recipe URL" />
         <div class="url-hint">
-          <strong>Note:</strong> The linked page must include ingredient names, weights or proportions,
-          and explicit sensory scores (0–100) for each ingredient. Claude reads the page
-          and extracts only what is stated — it will not invent missing values.
+          <strong>Note:</strong> The linked page must include ingredient names and weights or proportions.
+          Sensory scores are looked up automatically from our scientific database — no scores needed in your input.
         </div>
       </div>
     </div>
@@ -135,7 +136,8 @@ Example:
     <ul class="loading-steps">
       <li><span class="step-dot"></span>Sending input to Claude AI</li>
       <li><span class="step-dot"></span>Extracting structured ingredients</li>
-      <li><span class="step-dot"></span>Computing weighted feature vector</li>
+      <li><span class="step-dot"></span>Looking up sensory database</li>
+      <li><span class="step-dot"></span>Researching unknown ingredients</li>
       <li><span class="step-dot"></span>Running Lasso models</li>
       <li><span class="step-dot"></span>Finding dish image &amp; description</li>
     </ul>
@@ -178,6 +180,9 @@ Example:
             <tr>
               <th>Ingredient</th>
               <th>Weight</th>
+              <th>Source</th>
+              <th>Confidence</th>
+              <th>Evidence</th>
               <th>Sensory profile</th>
             </tr>
           </thead>

@@ -111,23 +111,63 @@ function buildRadar(predictions, confidence) {
 }
 
 // ── Recipe table ──────────────────────────────────────────────────────────────
+const SOURCE_BADGE = {
+  database:   { label: 'Database',   cls: 'badge-database' },
+  researched: { label: 'Researched', cls: 'badge-researched' },
+  unknown:    { label: 'Unknown',    cls: 'badge-unknown' },
+};
+
 function buildRecipeTable(recipe) {
   document.getElementById('recipeName').textContent = recipe.recipe_name;
   const tbody = document.getElementById('ingredientTbody');
   tbody.innerHTML = '';
   recipe.ingredients.forEach(ing => {
     const w = ing.weight, s = ing.sensory_scores, row = document.createElement('tr');
+
+    // Ingredient name
     const tdN = document.createElement('td');
     tdN.innerHTML = `<span class="ingredient-name">${ing.name}</span>`;
+
+    // Weight bar
     const tdW = document.createElement('td');
     tdW.className = 'weight-bar-cell';
     tdW.innerHTML = `<div class="weight-bar-wrap"><div class="weight-bar-bg"><div class="weight-bar" style="width:${Math.min(w*100,100)}%"></div></div><span class="weight-pct">${(w*100).toFixed(1)}%</span></div>`;
+
+    // Source badge
+    const src   = ing.source || 'unknown';
+    const badge = SOURCE_BADGE[src] || SOURCE_BADGE.unknown;
+    const tdSrc = document.createElement('td');
+    let srcTitle = '';
+    if (src === 'database' && ing.matched_name) srcTitle = `Matched to: ${ing.matched_name}`;
+    tdSrc.innerHTML = `<span class="source-badge ${badge.cls}" title="${srcTitle}">${badge.label}</span>`;
+
+    // Confidence
+    const tdConf = document.createElement('td');
+    if (src === 'researched' && ing.confidence != null) {
+      const pct = Math.round(ing.confidence * 100);
+      tdConf.innerHTML = `<span class="conf-value">${pct}%</span>`;
+    } else {
+      tdConf.innerHTML = `<span style="color:var(--text-dim)">—</span>`;
+    }
+
+    // Evidence
+    const tdEv = document.createElement('td');
+    if (src === 'researched' && ing.evidence) {
+      const url    = ing.source_url ? ` <a href="${ing.source_url}" target="_blank" rel="noopener" class="evidence-link">↗</a>` : '';
+      tdEv.innerHTML = `<span class="evidence-text" title="${ing.evidence}">${ing.evidence.slice(0,60)}${ing.evidence.length>60?'…':''}${url}</span>`;
+    } else {
+      tdEv.innerHTML = `<span style="color:var(--text-dim)">—</span>`;
+    }
+
+    // Sensory chips
     const tdS = document.createElement('td');
     tdS.innerHTML = SENSES.map(sense => {
-      const v = s[sense] ?? '–';
+      const v = s && s[sense] != null ? Number(s[sense]).toFixed(0) : '–';
       return `<span class="sense-chip" style="background:${SENSE_COLORS[sense]}18;color:${SENSE_COLORS[sense]};border:1px solid ${SENSE_COLORS[sense]}40"><span class="chip-label">${SENSE_LABELS[sense]}</span><span class="chip-val">${v}</span></span>`;
     }).join('');
-    row.append(tdN, tdW, tdS); tbody.appendChild(row);
+
+    row.append(tdN, tdW, tdSrc, tdConf, tdEv, tdS);
+    tbody.appendChild(row);
   });
 }
 
