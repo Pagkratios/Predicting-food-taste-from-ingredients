@@ -583,9 +583,11 @@ kbd {
   border-radius: 20px;
   white-space: nowrap;
 }
-.badge-database   { background: #d1fae5; color: #065f46; }
-.badge-researched { background: #fef3c7; color: #92400e; }
-.badge-unknown    { background: #fee2e2; color: #991b1b; }
+.badge-database         { background: #d1fae5; color: #065f46; }
+.badge-predicted-high   { background: #dbeafe; color: #1e40af; }
+.badge-predicted-medium { background: #fef3c7; color: #92400e; }
+.badge-predicted-low    { background: #fee2e2; color: #991b1b; }
+.badge-unknown          { background: #f3f4f6; color: #6b7280; }
 
 /* ── Confidence & Evidence ───────────────────────────────────────────────── */
 .conf-value {
@@ -593,6 +595,9 @@ kbd {
   font-weight: 600;
   color: var(--text-muted);
 }
+.conf-high   { color: #1e40af; }
+.conf-medium { color: #92400e; }
+.conf-low    { color: #991b1b; }
 .evidence-text {
   font-size: 11px;
   color: var(--text-muted);

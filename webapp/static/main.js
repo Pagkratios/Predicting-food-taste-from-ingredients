@@ -111,11 +111,17 @@ function buildRadar(predictions, confidence) {
 }
 
 // ── Recipe table ──────────────────────────────────────────────────────────────
-const SOURCE_BADGE = {
-  database:   { label: 'Database',   cls: 'badge-database' },
-  researched: { label: 'Researched', cls: 'badge-researched' },
-  unknown:    { label: 'Unknown',    cls: 'badge-unknown' },
-};
+
+// Badge config: source + confidence → label + CSS class
+function _sourceBadge(source, confidence) {
+  if (source === 'database') return { label: 'Database', cls: 'badge-database' };
+  if (source === 'predicted') {
+    if (confidence === 'High')   return { label: 'Predicted · High',   cls: 'badge-predicted-high' };
+    if (confidence === 'Medium') return { label: 'Predicted · Medium', cls: 'badge-predicted-medium' };
+    return                              { label: 'Predicted · Low',    cls: 'badge-predicted-low' };
+  }
+  return { label: 'Unknown', cls: 'badge-unknown' };
+}
 
 function buildRecipeTable(recipe) {
   document.getElementById('recipeName').textContent = recipe.recipe_name;
@@ -134,27 +140,28 @@ function buildRecipeTable(recipe) {
     tdW.innerHTML = `<div class="weight-bar-wrap"><div class="weight-bar-bg"><div class="weight-bar" style="width:${Math.min(w*100,100)}%"></div></div><span class="weight-pct">${(w*100).toFixed(1)}%</span></div>`;
 
     // Source badge
-    const src   = ing.source || 'unknown';
-    const badge = SOURCE_BADGE[src] || SOURCE_BADGE.unknown;
-    const tdSrc = document.createElement('td');
+    const src    = ing.source || 'unknown';
+    const conf   = ing.confidence || null;
+    const badge  = _sourceBadge(src, conf);
+    const tdSrc  = document.createElement('td');
     let srcTitle = '';
     if (src === 'database' && ing.matched_name) srcTitle = `Matched to: ${ing.matched_name}`;
     tdSrc.innerHTML = `<span class="source-badge ${badge.cls}" title="${srcTitle}">${badge.label}</span>`;
 
-    // Confidence
+    // Confidence column
     const tdConf = document.createElement('td');
-    if (src === 'researched' && ing.confidence != null) {
-      const pct = Math.round(ing.confidence * 100);
-      tdConf.innerHTML = `<span class="conf-value">${pct}%</span>`;
+    if (src === 'predicted' && conf) {
+      const confCls = conf === 'High' ? 'conf-high' : conf === 'Medium' ? 'conf-medium' : 'conf-low';
+      tdConf.innerHTML = `<span class="conf-value ${confCls}">${conf}</span>`;
     } else {
       tdConf.innerHTML = `<span style="color:var(--text-dim)">—</span>`;
     }
 
-    // Evidence
+    // Evidence (expandable tooltip)
     const tdEv = document.createElement('td');
-    if (src === 'researched' && ing.evidence) {
-      const url    = ing.source_url ? ` <a href="${ing.source_url}" target="_blank" rel="noopener" class="evidence-link">↗</a>` : '';
-      tdEv.innerHTML = `<span class="evidence-text" title="${ing.evidence}">${ing.evidence.slice(0,60)}${ing.evidence.length>60?'…':''}${url}</span>`;
+    if (src === 'predicted' && ing.evidence) {
+      const short = ing.evidence.length > 60 ? ing.evidence.slice(0, 60) + '…' : ing.evidence;
+      tdEv.innerHTML = `<span class="evidence-text" title="${ing.evidence.replace(/"/g, '&quot;')}">${short}</span>`;
     } else {
       tdEv.innerHTML = `<span style="color:var(--text-dim)">—</span>`;
     }

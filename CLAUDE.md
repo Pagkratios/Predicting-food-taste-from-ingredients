@@ -7,7 +7,7 @@ Predicts five sensory attributes (sweet, bitter, salty, umami, sour) from recipe
 ## Setup
 
 ```bash
-pip install -r Lasso_project/requirements.txt
+pip install -r requirements.txt
 ```
 
 Requires Python 3.8+.
@@ -18,30 +18,30 @@ All scripts are run from the repo root:
 
 ```bash
 # Optional: standalone HS/RV bounds export
-python3 Bounds_project/src/compute_bounds.py
+python3 HS_RV/src/compute_bounds.py
 
 # 1. Preprocess raw data into feature/target matrices
-python3 Lasso_project/src/preprocess.py
+python3 Lasso/src/preprocess.py
 
 # 2. Generate exploratory data analysis plots
-python3 Lasso_project/src/data_plots.py
+python3 Lasso/src/data_plots.py
 
 # 3. Train models and produce evaluation plots/metrics
-python3 Lasso_project/src/train.py
+python3 Lasso/src/train.py
 
 # Selective plot regeneration without retraining
-python3 Lasso_project/src/data_plots.py --only gaussians combined
-python3 Lasso_project/src/data_plots.py --only pca tsne
-python3 Lasso_project/src/run_all.py --steps plots --plot-groups gaussians combined
+python3 Lasso/src/data_plots.py --only gaussians combined
+python3 Lasso/src/data_plots.py --only pca tsne
+python3 Lasso/src/run_all.py --steps plots --plot-groups gaussians combined
 ```
 
 ## Project Structure
 
 ```
-Bounds_project/
+HS_RV/
   src/
     compute_bounds.py     # Standalone HS/RV computation pipeline
-    env_config.py         # RAW_RECIPES_PATH loader for Bounds_project
+    env_config.py         # RAW_RECIPES_PATH loader for HS_RV
 
 data/
   raw_recipes.py         # Shared default dataset; preferred RAW_RECIPES_PATH target
@@ -49,7 +49,7 @@ data/
   hs_predictions.py      # Generated HS bounds export
   rv_predictions.py      # Generated RV bounds export
 
-Lasso_project/
+Lasso/
   data/
     raw_recipes.py         # Compatibility shim to shared repo-level data/raw_recipes.py
     data_predictions.py    # Compatibility shim to shared repo-level data/data_predictions.py
@@ -61,22 +61,29 @@ Lasso_project/
     data_plots.py          # EDA: pie chart, KDE/Gaussian, t-SNE, PCA clustering
     train.py               # LOO alpha tuning, Lasso training, metrics, plots
     lasso.py               # Custom Lasso via proximal gradient descent
-  results/                 # All generated outputs (gitignored)
-    plots_data/            # Ingredient usage, KDE/Gaussian distribution plots
-    t-sne/                 # t-SNE clustering: scatter, silhouette, p-values, members
-    pca/                   # PCA clustering: scatter, silhouette, loadings, members
-    plots/                 # Predicted vs Actual scatter, RMSE boxplot
-    models/                # Trained models (.pkl), predictions (.json, .csv)
-    metrics/               # Per-method and combined metric tables (.csv, .md, .tex)
   data/processed/          # Preprocessed .npy arrays (gitignored)
-  requirements.txt
+
+results/                   # All generated outputs (gitignored)
+  plots_data/              # Ingredient usage, KDE/Gaussian distribution plots
+  t-sne/                   # t-SNE clustering: scatter, silhouette, p-values, members
+  pca/                     # PCA clustering: scatter, silhouette, loadings, members
+  plots/                   # Predicted vs Actual scatter, RMSE boxplot
+  models/                  # Trained models (.pkl), predictions (.json, .csv)
+  metrics/                 # Per-method and combined metric tables (.csv, .md, .tex)
+
+webapp/
+  app.py                   # Flask web app
+  templates/index.html
+  static/
+
+requirements.txt           # Universal requirements for the entire repo
 ```
 
 ## Key Constants
 
 - `SENSORY_ORDER = ['sweet', 'bitter', 'salty', 'umami', 'sour']`
 - `ALIASES` maps alternate names (e.g., `sweetness` -> `sweet`)
-- All output paths are constructed from `PROJECT_ROOT` (= `Lasso_project/`)
+- All output paths are constructed from `PROJECT_ROOT` (= `Lasso/`)
 - All shared constants live in `plot_config.py` (single source of truth)
 
 ## Data Format
@@ -96,7 +103,7 @@ The active raw recipe file is configured by `RAW_RECIPES_PATH` in `.env`. It sho
 
 ## Plotting Conventions
 
-All plots use the shared styling module `Lasso_project/src/plot_config.py`.
+All plots use the shared styling module `Lasso/src/plot_config.py`.
 
 ### Usage
 
@@ -127,8 +134,8 @@ save_figure(fig, "path/to/output.png")
 
 ## Notes
 
-- All generated outputs under `Lasso_project/results/` and `Lasso_project/data/processed/` are gitignored. Re-run the scripts to regenerate.
-- `Bounds_project/src/compute_bounds.py` is intentionally separate from the Lasso pipeline and writes shared HS/RV exports under `data/`.
+- All generated outputs under `results/` and `Lasso/data/processed/` are gitignored. Re-run the scripts to regenerate.
+- `HS_RV/src/compute_bounds.py` is intentionally separate from the Lasso pipeline and writes shared HS/RV exports under `data/`.
 - `data_plots.py` supports `--only` so you can regenerate just selected plot groups without touching trained artifacts.
 - `run_all.py` supports `--steps`, `--plot-groups`, and optional `--clean` for selective reruns.
 - `train.py` writes Lasso predictions back into `data/data_predictions.py`.

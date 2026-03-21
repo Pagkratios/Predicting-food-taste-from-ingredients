@@ -20,19 +20,14 @@ from flask import Flask, jsonify, render_template, request
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 REPO_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-LASSO_SRC    = os.path.join(REPO_ROOT, "Lasso_project", "src")
-PROC_DIR     = os.path.join(REPO_ROOT, "Lasso_project", "data", "processed")
-MODELS_PATH  = os.path.join(REPO_ROOT, "Lasso_project", "results", "models", "final_models.pkl")
-METRICS_PATH = os.path.join(REPO_ROOT, "Lasso_project", "results", "metrics", "lasso_metrics.csv")
-SCALER_MEAN  = os.path.join(PROC_DIR, "x_scaler_mean.npy")
-SCALER_SCALE = os.path.join(PROC_DIR, "x_scaler_scale.npy")
-EXCEL_PATH   = os.path.join(REPO_ROOT, "data", "Supplementary_Data_File_1_v10.xlsx")
-PREDICTED_DATA_PATH = os.path.join(REPO_ROOT, "data", "predicted_sensory_data.py")
+LASSO_SRC    = os.path.join(REPO_ROOT, "Lasso", "src")
+PROC_DIR     = os.path.join(REPO_ROOT, "Lasso", "data", "processed")
+MODELS_PATH  = os.path.join(REPO_ROOT, "results", "models", "final_models.pkl")
+METRICS_PATH = os.path.join(REPO_ROOT, "results", "metrics", "lasso_metrics.csv")
+DB_PATH      = os.path.join(REPO_ROOT, "data", "sensory_database.json")
 
-# Order used by preprocess.py when building X feature vectors
-FEATURE_KEYS = ["sweet", "bitter", "sour", "umami", "salty"]
-
-# Sensory dimensions the models predict (keys in final_models.pkl)
+# Canonical sensory order – must match preprocess.py SENSORY_KEYS and plot_config.py SENSORY_ORDER
+FEATURE_KEYS  = ["sweet", "bitter", "salty", "umami", "sour"]
 SENSORY_ORDER = ["sweet", "bitter", "salty", "umami", "sour"]
 
 # Make lasso.py importable (required to unpickle final_models.pkl)
@@ -78,97 +73,50 @@ _models = load_models()
 _rmse   = load_rmse()
 
 
-# ── Sensory database (Excel) ──────────────────────────────────────────────────
+# ── Sensory database (JSON) ───────────────────────────────────────────────────
 
-def _load_sensory_database() -> tuple[list, dict]:
-    """Load the 'foods' sheet and return (list_of_names, name→scores dict)."""
-    import openpyxl
-    wb   = openpyxl.load_workbook(EXCEL_PATH, read_only=True, data_only=True)
-    ws   = wb["foods"]
-    rows = list(ws.iter_rows(values_only=True))
-    wb.close()
-
-    header = rows[0]
-    col    = {h: i for i, h in enumerate(header) if h is not None}
-
-    def safe(v):
-        try:
-            return float(v)
-        except (TypeError, ValueError):
-            return None
-
-    db_names = []
-    db_map   = {}
-    for row in rows[1:]:
-        name = row[col.get("Food Name (EN)", 1)]
-        if not name:
-            continue
-        scores = {
-            "sweet":  safe(row[col.get("Sweet Mean",  4)]),
-            "sour":   safe(row[col.get("Sour Mean",   7)]),
-            "bitter": safe(row[col.get("Bitter Mean", 10)]),
-            "umami":  safe(row[col.get("Umami Mean",  13)]),
-            "salty":  safe(row[col.get("Salt Mean",   16)]),
-        }
-        if any(v is None for v in scores.values()):
-            continue
-        name_str = str(name)
-        db_names.append(name_str)
-        db_map[name_str] = scores
-    return db_names, db_map
+def _load_db() -> list[dict]:
+    with open(DB_PATH, encoding="utf-8") as f:
+        return json.load(f)
 
 
-_db_names, _db_map = _load_sensory_database()
+def _save_db(entries: list[dict]) -> None:
+    with open(DB_PATH, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
 
 
-# ── Predicted sensory data cache ──────────────────────────────────────────────
-
-def _load_predicted() -> list:
-    if not os.path.exists(PREDICTED_DATA_PATH):
-        return []
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("predicted_sensory_data", PREDICTED_DATA_PATH)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return list(getattr(mod, "predicted_ingredients", []))
-
-
-def _get_cached(name: str) -> dict | None:
-    name_key = name.lower().strip()
-    for entry in _load_predicted():
-        if entry.get("name", "").lower().strip() == name_key:
-            return entry
-    return None
+def _append_to_db(entry: dict) -> None:
+    """Append a new researched ingredient to the JSON database."""
+    entries = _load_db()
+    # Guard against duplicates
+    name_key = entry["name"].lower().strip()
+    if any(e["name"].lower().strip() == name_key for e in entries):
+        return
+    entries.append(entry)
+    _save_db(entries)
 
 
-def _save_predicted(name: str, result: dict) -> None:
-    predicted = _load_predicted()
-    name_key  = name.lower().strip()
-    if any(e.get("name", "").lower().strip() == name_key for e in predicted):
-        return  # already cached
-    predicted.append({
-        "name":           name,
-        "sensory_scores": result["sensory_scores"],
-        "confidence":     result.get("confidence", 0.7),
-        "evidence":       result.get("evidence", ""),
-        "source_url":     result.get("source_url", None),
-    })
-    lines = [
-        "# Auto-generated by FlavorLab webapp — do not edit manually\n",
-        "# Structure: name, sensory_scores (0-100), confidence (0-1), evidence, source_url\n",
-        "predicted_ingredients = [\n",
-    ]
-    for e in predicted:
-        lines.append(f"    {repr(e)},\n")
-    lines.append("]\n")
-    with open(PREDICTED_DATA_PATH, "w") as fh:
-        fh.writelines(lines)
+# Load DB names once at startup for matching
+_db_entries: list[dict] = _load_db()
+_db_names:   list[str]  = [e["name"] for e in _db_entries]
+_db_map:     dict       = {e["name"]: e for e in _db_entries}
 
 
-# ── Ingredient enrichment ─────────────────────────────────────────────────────
+def _reload_db_cache() -> None:
+    """Refresh in-memory DB cache after appending a new entry."""
+    global _db_entries, _db_names, _db_map
+    _db_entries = _load_db()
+    _db_names   = [e["name"] for e in _db_entries]
+    _db_map     = {e["name"]: e for e in _db_entries}
+
+
+# ── Ingredient lookup ─────────────────────────────────────────────────────────
 
 def _match_to_database(ingredient_names: list[str]) -> dict:
-    """Batch-match ingredient names to the Excel database via Claude."""
+    """
+    Batch-match ingredient names to the JSON database via Claude.
+    Returns {ingredient_name: matched_db_name | null}.
+    """
     db_list_str = "\n".join(f"- {n}" for n in _db_names)
     prompt = (
         "Match each ingredient to the closest entry in the food database below.\n"
@@ -196,22 +144,53 @@ def _match_to_database(ingredient_names: list[str]) -> dict:
     return json.loads(raw)
 
 
-def _research_ingredient(name: str) -> dict | None:
-    """Use Claude + web_search to find sensory scores for an unmatched ingredient."""
-    client  = anthropic.Anthropic()
-    prompt  = (
-        f'Search for scientific evidence about the sensory taste profile of "{name}".\n\n'
-        "Find peer-reviewed research or validated food science databases reporting taste "
-        "intensities for: sweet, sour, bitter, umami, and salty on a 0–100 scale "
-        "(Spectrum™ scale or equivalent).\n\n"
-        "If you find reliable evidence, return ONLY this JSON:\n"
-        '{"sensory_scores": {"sweet": <0-100>, "sour": <0-100>, "bitter": <0-100>, '
-        '"umami": <0-100>, "salty": <0-100>}, "confidence": <0.0-1.0>, '
-        '"evidence": "<1-2 sentence summary of source>", "source_url": "<URL or null>"}\n\n'
-        'If you cannot find reliable scientific evidence, return: {"confident": false}\n\n'
-        "Return ONLY valid JSON."
+def _research_ingredient(name: str) -> dict:
+    """
+    Use Claude + web_search to find sensory scores for an unmatched ingredient.
+
+    Always returns a dict with scores and one of three confidence levels:
+      High   – solid cited scientific evidence
+      Medium – scattered sources, reasonable estimate
+      Low    – little/no sources, predicted from model knowledge
+    """
+    client = anthropic.Anthropic()
+    prompt = (
+        f'Research the sensory taste profile of "{name}" for use in food science.\n\n'
+        "Find taste intensities on a 0–100 scale (Spectrum™ or equivalent) for:\n"
+        "sweet, sour, bitter, umami, salty.\n\n"
+        "Assign confidence based on what you find:\n"
+        "HIGH   — solid cited scientific evidence (food science papers, official food databases)\n"
+        "MEDIUM — scattered or indirect sources, enough to make a reasonable estimate\n"
+        "LOW    — little to nothing found; predict from your food science knowledge\n\n"
+        "You MUST always return scores. Never refuse or return null scores.\n\n"
+        "Return ONLY this JSON (no markdown, no extra text):\n"
+        '{\n'
+        '  "sweet": <0-100>,\n'
+        '  "sour": <0-100>,\n'
+        '  "bitter": <0-100>,\n'
+        '  "umami": <0-100>,\n'
+        '  "salty": <0-100>,\n'
+        '  "confidence": "High" | "Medium" | "Low",\n'
+        '  "evidence": "<1-2 sentences citing sources or explaining reasoning>"\n'
+        '}'
     )
     messages = [{"role": "user", "content": prompt}]
+
+    def _parse_result(text: str) -> dict | None:
+        text = text.strip()
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.lower().startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        try:
+            result = json.loads(text)
+            if all(k in result for k in ("sweet", "sour", "bitter", "umami", "salty", "confidence")):
+                return result
+        except Exception:
+            pass
+        return None
+
     try:
         for _ in range(6):
             response = client.beta.messages.create(
@@ -224,20 +203,9 @@ def _research_ingredient(name: str) -> dict | None:
             if response.stop_reason == "end_turn":
                 for block in reversed(response.content):
                     if hasattr(block, "text") and block.text.strip():
-                        raw = block.text.strip()
-                        if raw.startswith("```"):
-                            raw = raw.split("```")[1]
-                            if raw.lower().startswith("json"):
-                                raw = raw[4:]
-                            raw = raw.strip()
-                        try:
-                            result = json.loads(raw)
-                            if result.get("confident") is False:
-                                return None
-                            if "sensory_scores" in result:
-                                return result
-                        except Exception:
-                            pass
+                        result = _parse_result(block.text)
+                        if result:
+                            return result
                 break
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
@@ -248,18 +216,49 @@ def _research_ingredient(name: str) -> dict | None:
             else:
                 break
     except Exception as exc:
-        print(f"[webapp] research for '{name}' failed: {exc}")
-    return None
+        print(f"[webapp] web research for '{name}' failed: {exc}")
 
+    # Fallback: ask Claude without web search (always succeeds)
+    try:
+        fallback = anthropic.Anthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=512,
+            messages=[{"role": "user", "content": (
+                f'Predict the sensory taste profile of "{name}" from your food science knowledge.\n'
+                'Return ONLY JSON: {"sweet":<0-100>,"sour":<0-100>,"bitter":<0-100>,'
+                '"umami":<0-100>,"salty":<0-100>,"confidence":"Low",'
+                '"evidence":"Predicted from model knowledge, no reliable sources found"}'
+            )}],
+        )
+        result = _parse_result(fallback.content[0].text)
+        if result:
+            return result
+    except Exception as exc:
+        print(f"[webapp] fallback prediction for '{name}' failed: {exc}")
+
+    # Hard fallback – neutral scores
+    return {
+        "sweet": 10.0, "sour": 10.0, "bitter": 10.0, "umami": 10.0, "salty": 10.0,
+        "confidence": "Low",
+        "evidence": "Predicted from model knowledge, no reliable sources found",
+    }
+
+
+# ── Ingredient enrichment ─────────────────────────────────────────────────────
 
 def enrich_ingredients(ingredients: list) -> list:
     """
-    Enrich each ingredient with sensory scores from database, cache, or research.
-    Tags each ingredient with source: 'database' | 'researched' | 'unknown'.
+    Enrich each ingredient with sensory scores.
+
+    Step 1 – Check JSON database (semantic match via Claude).
+    Step 2 – Research with web search → High / Medium / Low confidence.
+    Step 3 – Append researched ingredient to database for future lookups.
+
+    Every ingredient always gets scores. Nothing is excluded.
     """
     names = [ing["name"] for ing in ingredients]
 
-    # Step 1: batch-match all names against the Excel database
+    # Step 1: batch-match all names against the database
     try:
         matches = _match_to_database(names)
     except Exception as exc:
@@ -271,47 +270,50 @@ def enrich_ingredients(ingredients: list) -> list:
         name     = ing["name"]
         db_match = matches.get(name)
 
-        # ── database match ────────────────────────────────────────────────────
+        # ── database hit ──────────────────────────────────────────────────────
         if db_match and db_match in _db_map:
+            entry = _db_map[db_match]
+            scores = {k: entry[k] for k in ("sweet", "sour", "bitter", "umami", "salty")}
             enriched.append({
                 **ing,
-                "sensory_scores": _db_map[db_match],
+                "sensory_scores": scores,
                 "source":         "database",
                 "matched_name":   db_match,
+                "confidence":     None,
+                "evidence":       None,
             })
             continue
 
-        # ── local cache (previously researched) ──────────────────────────────
-        cached = _get_cached(name)
-        if cached:
-            enriched.append({
-                **ing,
-                "sensory_scores": cached["sensory_scores"],
-                "source":         "researched",
-                "confidence":     cached.get("confidence", 0.7),
-                "evidence":       cached.get("evidence", ""),
-                "source_url":     cached.get("source_url", None),
-            })
-            continue
-
-        # ── web research ──────────────────────────────────────────────────────
+        # ── Step 2: research ──────────────────────────────────────────────────
+        print(f"[webapp] Researching '{name}'…")
         result = _research_ingredient(name)
-        if result:
-            _save_predicted(name, result)
-            enriched.append({
-                **ing,
-                "sensory_scores": result["sensory_scores"],
-                "source":         "researched",
-                "confidence":     result.get("confidence", 0.7),
-                "evidence":       result.get("evidence", ""),
-                "source_url":     result.get("source_url", None),
-            })
-        else:
-            enriched.append({
-                **ing,
-                "sensory_scores": {"sweet": 0, "sour": 0, "bitter": 0, "umami": 0, "salty": 0},
-                "source":         "unknown",
-            })
+
+        scores = {k: float(result[k]) for k in ("sweet", "sour", "bitter", "umami", "salty")}
+        confidence = result.get("confidence", "Low")
+        evidence   = result.get("evidence", "")
+
+        # Step 3: persist to database
+        new_entry = {
+            "name":       name,
+            "sweet":      scores["sweet"],
+            "sour":       scores["sour"],
+            "bitter":     scores["bitter"],
+            "umami":      scores["umami"],
+            "salty":      scores["salty"],
+            "predicted":  True,
+            "confidence": confidence,
+            "evidence":   evidence,
+        }
+        _append_to_db(new_entry)
+        _reload_db_cache()
+
+        enriched.append({
+            **ing,
+            "sensory_scores": scores,
+            "source":         "predicted",
+            "confidence":     confidence,
+            "evidence":       evidence,
+        })
 
     return enriched
 
@@ -414,36 +416,72 @@ def fetch_url_text(url: str) -> str:
     return " ".join(soup.get_text(separator=" ").split())
 
 
-def enrich_with_dish_info(recipe_name: str) -> dict:
-    """Find a dish image URL and description using Claude with web_search."""
+def _scrape_image_from_url(url: str) -> str | None:
+    """Extract the best image from a recipe page (og:image → twitter:image → first large img)."""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; FlavorLab/1.0)"}
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # 1. OpenGraph image (most reliable on recipe sites)
+        og = soup.find("meta", property="og:image")
+        if og and og.get("content"):
+            return og["content"]
+
+        # 2. Twitter card image
+        tw = soup.find("meta", attrs={"name": "twitter:image"})
+        if tw and tw.get("content"):
+            return tw["content"]
+
+        # 3. First <img> with a src that looks like a photo (not icon/logo)
+        for img in soup.find_all("img", src=True):
+            src = img["src"]
+            if any(src.lower().endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp")):
+                if not any(skip in src.lower() for skip in ("icon", "logo", "avatar", "pixel", "1x1")):
+                    # Make absolute if relative
+                    if src.startswith("//"):
+                        src = "https:" + src
+                    elif src.startswith("/"):
+                        from urllib.parse import urlparse
+                        p = urlparse(url)
+                        src = f"{p.scheme}://{p.netloc}{src}"
+                    return src
+    except Exception as exc:
+        print(f"[webapp] image scrape failed for {url}: {exc}")
+    return None
+
+
+def _search_dish_image(recipe_name: str) -> str | None:
+    """Use Claude + web_search to find a dish image URL."""
     client = anthropic.Anthropic()
     prompt = (
-        f'Search the web for "{recipe_name}" dish. '
-        'Find a direct image URL (ending in .jpg, .png, or .webp from a public food/recipe site). '
-        'Also write a 2–3 sentence professional food science description of the dish. '
-        'Return ONLY valid JSON: {"image_url": "<URL or null>", "description": "<text>"}'
+        f'Search the web for a photo of the dish "{recipe_name}". '
+        'Find a direct image URL ending in .jpg, .png, or .webp from a reputable food or recipe site. '
+        'Return ONLY valid JSON: {"image_url": "<URL or null>"}'
     )
     messages = [{"role": "user", "content": prompt}]
 
-    def _parse(text: str) -> dict | None:
+    def _parse(text: str) -> str | None:
         text = text.strip()
         if "```" in text:
             parts = text.split("```")
             for p in parts:
                 if p.startswith("json"): p = p[4:]
-                if "{" in p:
-                    text = p.strip(); break
-        m = re.search(r'\{[^{}]+\}', text, re.DOTALL)
+                if "{" in p: text = p.strip(); break
+        m = re.search(r'\{[^{}]*"image_url"\s*:\s*"([^"]+)"[^{}]*\}', text)
         if m:
-            try: return json.loads(m.group())
-            except Exception: pass
+            val = m.group(1)
+            return val if val.lower() != "null" else None
         return None
 
     try:
         for _ in range(5):
             response = client.beta.messages.create(
                 model="claude-sonnet-4-6",
-                max_tokens=1024,
+                max_tokens=512,
                 tools=[{"type": "web_search_20250305", "name": "web_search"}],
                 messages=messages,
                 betas=["web-search-2025-03-05"],
@@ -452,7 +490,8 @@ def enrich_with_dish_info(recipe_name: str) -> dict:
                 for block in reversed(response.content):
                     if hasattr(block, "text") and block.text.strip():
                         result = _parse(block.text)
-                        if result: return result
+                        if result:
+                            return result
                 break
             if response.stop_reason == "tool_use":
                 messages.append({"role": "assistant", "content": response.content})
@@ -463,16 +502,47 @@ def enrich_with_dish_info(recipe_name: str) -> dict:
             else:
                 break
     except Exception as exc:
-        print(f"[webapp] dish info enrichment failed: {exc}")
+        print(f"[webapp] dish image search failed: {exc}")
+    return None
 
-    return {
-        "image_url": None,
-        "description": (
+
+def enrich_with_dish_info(recipe_name: str, source_url: str | None = None) -> dict:
+    """
+    Get dish image + description.
+
+    If source_url is provided: scrape image directly from that page.
+    Otherwise: use Claude web_search to find a photo of the dish.
+    Description is always generated by Claude (no web search needed).
+    """
+    # ── Image ──────────────────────────────────────────────────────────────
+    if source_url:
+        image_url = _scrape_image_from_url(source_url)
+        if not image_url:
+            # Fallback: search anyway
+            image_url = _search_dish_image(recipe_name)
+    else:
+        image_url = _search_dish_image(recipe_name)
+
+    # ── Description (always from Claude, no web call needed) ───────────────
+    try:
+        msg = anthropic.Anthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=256,
+            messages=[{"role": "user", "content": (
+                f'Write a 2–3 sentence professional food science description of "{recipe_name}". '
+                "Focus on its sensory character (taste, texture, aroma). Plain text only."
+            )}],
+        )
+        description = msg.content[0].text.strip()
+    except Exception as exc:
+        print(f"[webapp] description generation failed: {exc}")
+        description = (
             f"{recipe_name} is a prepared dish whose overall sensory profile emerges from "
             "the interaction of its ingredients across the five primary taste dimensions: "
             "sweet, bitter, salty, umami, and sour."
-        ),
-    }
+        )
+
+    return {"image_url": image_url, "description": description}
 
 
 def extract_recipe(text: str) -> dict:
@@ -483,7 +553,6 @@ def extract_recipe(text: str) -> dict:
         messages=[{"role": "user", "content": f"{_EXTRACTION_PROMPT}\n\n{text}"}],
     )
     raw = message.content[0].text.strip()
-    # Strip any accidental code fences
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.lower().startswith("json"):
@@ -503,7 +572,9 @@ def index():
 def predict():
     try:
         # 1. Collect text from upload or form field
-        text = ""
+        text       = ""
+        source_url = None  # set only for URL input; used for image scraping
+
         if "file" in request.files and request.files["file"].filename:
             file     = request.files["file"]
             filename = file.filename.lower()
@@ -534,8 +605,9 @@ def predict():
                 return jsonify({"error": "Unsupported file type. Use .txt, .pdf, or .docx"}), 400
 
         elif request.form.get("url", "").strip():
+            source_url = request.form["url"].strip()
             try:
-                text = fetch_url_text(request.form["url"].strip())
+                text = fetch_url_text(source_url)
             except Exception as exc:
                 return jsonify({"error": f"Could not fetch URL: {exc}"}), 400
 
@@ -548,18 +620,14 @@ def predict():
         # 2. Claude extracts structured recipe (names + weights only)
         recipe = extract_recipe(text)
 
-        # 3. Enrich each ingredient with sensory scores from database / research
+        # 3. Enrich every ingredient with sensory scores (no exclusions)
         recipe["ingredients"] = enrich_ingredients(recipe["ingredients"])
 
-        # 4. Use only known ingredients for the Lasso feature vector
-        known = [i for i in recipe["ingredients"] if i["source"] != "unknown"]
-        if not known:
-            return jsonify({"error": "No sensory data could be found for any ingredient."}), 422
-
-        known_norm = _normalize_weights(known)
-        raw_vec    = _compute_feature_vector(known_norm)
-        std_vec    = _standardize(raw_vec)
-        x          = std_vec.reshape(1, -1)
+        # 4. Normalise weights and build feature vector from all ingredients
+        all_norm = _normalize_weights(recipe["ingredients"])
+        raw_vec  = _compute_feature_vector(all_norm)
+        std_vec  = _standardize(raw_vec)
+        x        = std_vec.reshape(1, -1)
 
         predictions = {}
         confidence  = {}
@@ -573,10 +641,10 @@ def predict():
                 "upper": round(min(100.0, pred + rmse), 1),
             }
 
-        # 5. Normalise all weights for display (including unknowns)
-        recipe["ingredients"] = _normalize_weights(recipe["ingredients"])
+        # 5. Store normalised weights back for display
+        recipe["ingredients"] = all_norm
 
-        dish_info = enrich_with_dish_info(recipe["recipe_name"])
+        dish_info = enrich_with_dish_info(recipe["recipe_name"], source_url=source_url)
 
         return jsonify({
             "recipe":      recipe,

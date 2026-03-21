@@ -10,7 +10,7 @@ from env_config import get_raw_recipes_path
 SEED = 42
 np.random.seed(SEED)
 
-SENSORY_KEYS = ['sweet', 'bitter', 'sour', 'umami', 'salty']
+SENSORY_KEYS = ['sweet', 'bitter', 'salty', 'umami', 'sour']
 
 # Paths
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
