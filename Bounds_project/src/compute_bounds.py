@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import importlib.util
-import json
 import math
 import os
 import pprint
@@ -16,19 +15,23 @@ from env_config import get_raw_recipes_path
 
 
 SENSORY_DIMENSIONS = ["sweet", "sour", "bitter", "umami", "salty"]
-EPSILON = 1e-12
-HS_APPROXIMATION_NOTE = (
-    "For recipes with more than two ingredients, HS is approximated as a two-phase "
-    "system that uses the total normalized fraction at the minimum and maximum "
-    "ingredient sensory values. Intermediate ingredients are absorbed into the "
-    "complementary matrix fraction in the closed-form HS expressions."
-)
+DISPLAY_ORDER = ["bitter", "salty", "sour", "sweet", "umami"]
+DISPLAY_DIMENSIONS = {
+    "sweet": "sweetness",
+    "sour": "sourness",
+    "bitter": "bitterness",
+    "umami": "umami",
+    "salty": "saltiness",
+}
+EPS = 1e-8
+HS_NOTE = "Full N-phase Hashin-Shtrikman bounds computed over all ingredients per the exact specification."
 
 SRC_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(SRC_DIR, os.pardir))
-HS_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "hs_predictions.py")
-RV_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "rv_predictions.py")
-JSON_OUTPUT_PATH = os.path.join(PROJECT_ROOT, "bounds_predictions.json")
+REPO_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir))
+SHARED_DATA_DIR = os.path.join(REPO_ROOT, "data")
+HS_OUTPUT_PATH = os.path.join(SHARED_DATA_DIR, "hs_predictions.py")
+RV_OUTPUT_PATH = os.path.join(SHARED_DATA_DIR, "rv_predictions.py")
 
 
 def load_attr_from_py(filepath: str, variable_name: str) -> Any:
@@ -53,12 +56,17 @@ def _coerce_float(value: Any, default: float = 0.0) -> float:
 
 
 def _round_float(value: float | None, digits: int = 6) -> float | None:
-    """Round finite floats for stable, readable exports."""
-    if value is None:
-        return None
-    if not math.isfinite(value):
+    """Round finite floats for stable intermediate storage."""
+    if value is None or not math.isfinite(value):
         return None
     return round(float(value), digits)
+
+
+def _round_int(value: float | None) -> int | None:
+    """Round values for the human-readable legacy-style HS/RV exports."""
+    if value is None or not math.isfinite(value):
+        return None
+    return int(round(float(value)))
 
 
 def _clip_score(value: float) -> float:
@@ -76,7 +84,7 @@ def normalize_weights(ingredients: list[dict[str, Any]]) -> np.ndarray:
     weights = np.clip(weights, 0.0, None)
 
     total = float(weights.sum())
-    if total <= EPSILON:
+    if total <= EPS:
         return np.zeros_like(weights)
     return weights / total
 
@@ -92,90 +100,68 @@ def _extract_dimension_scores(ingredients: list[dict[str, Any]], dimension: str)
     return np.clip(array, 0.0, None)
 
 
-def _stable_ratio(numerator: float, denominator: float, fallback: float = 0.0) -> float:
-    """Divide safely and return a finite fallback when the ratio is unstable."""
-    if not math.isfinite(denominator) or abs(denominator) <= EPSILON:
-        return fallback
-    value = numerator / denominator
-    if not math.isfinite(value):
-        return fallback
-    return float(value)
+def compute_rv(T: np.ndarray, v: np.ndarray) -> dict[str, float]:
+    """Compute Reuss (lower) and Voigt (upper) bounds for one sensory dimension.
 
-
-def compute_rv(E: np.ndarray, v: np.ndarray) -> dict[str, float]:
-    """Compute Reuss and Voigt bounds for one sensory dimension."""
-    E = np.asarray(E, dtype=float)
-    v = np.asarray(v, dtype=float)
-
-    if E.size == 0 or v.size == 0:
-        return {"reuss": 0.0, "voigt": 0.0}
-
-    active_mask = v > EPSILON
-    if not np.any(active_mask):
-        return {"reuss": 0.0, "voigt": 0.0}
-
-    E_active = np.clip(E[active_mask], 0.0, None)
-    v_active = v[active_mask]
-    v_active = v_active / v_active.sum()
-
-    voigt = _clip_score(float(np.dot(v_active, E_active)))
-
-    if np.any(E_active <= EPSILON):
-        reuss = 0.0
-    else:
-        denominator = float(np.sum(v_active / np.maximum(E_active, EPSILON)))
-        reuss = 0.0 if denominator <= EPSILON else float(1.0 / denominator)
-
-    reuss = _clip_score(reuss)
-    reuss = min(reuss, voigt)
-    return {"reuss": reuss, "voigt": voigt}
-
-
-def compute_hs(E: np.ndarray, v: np.ndarray) -> dict[str, float]:
-    """Compute two-phase HS bounds for one sensory dimension.
-
-    For multi-ingredient recipes, this uses a documented approximation:
-    the total normalized weight at the minimum and maximum ingredient values is
-    retained explicitly, and all intermediate values are absorbed into the
-    complementary matrix fraction.
+    All N ingredient terms are included. T_i < EPS is clamped to EPS (not skipped).
+    Weights v must be pre-normalized (sum to 1).
     """
-    E = np.asarray(E, dtype=float)
-    v = np.asarray(v, dtype=float)
+    rv_upper = float(np.dot(v, T))
+    rv_lower = 1.0 / float(np.sum(v / np.maximum(T, EPS)))
+    return {"rv_lower": rv_lower, "rv_upper": rv_upper}
 
-    if E.size == 0 or v.size == 0:
-        return {"hs_lower": 0.0, "hs_upper": 0.0}
 
-    active_mask = v > EPSILON
-    if not np.any(active_mask):
-        return {"hs_lower": 0.0, "hs_upper": 0.0}
+def compute_hs(T: np.ndarray, v: np.ndarray) -> dict[str, float]:
+    """Compute full N-phase Hashin-Shtrikman bounds for one sensory dimension.
 
-    E_active = np.clip(E[active_mask], 0.0, None)
-    v_active = v[active_mask]
-    v_active = v_active / v_active.sum()
+    Uses all N ingredient phases — no two-phase approximation.
+    Weights v must be pre-normalized (sum to 1).
+    """
+    idx = np.argsort(T)
+    T_s = T[idx]
+    v_s = v[idx]
 
-    t_max = float(np.max(E_active))
-    t_min = float(np.min(E_active))
+    T1 = float(T_s[0])
+    TN = float(T_s[-1])
 
-    if math.isclose(t_max, t_min, rel_tol=0.0, abs_tol=EPSILON):
-        bound = _clip_score(t_max)
-        return {"hs_lower": bound, "hs_upper": bound}
+    alpha1 = 1.0 / (3.0 * max(T1, EPS))
+    alphaN = 1.0 / (3.0 * max(TN, EPS))
 
-    v_max = float(v_active[np.isclose(E_active, t_max, rtol=0.0, atol=EPSILON)].sum())
-    v_min = float(v_active[np.isclose(E_active, t_min, rtol=0.0, atol=EPSILON)].sum())
+    # A_1: sum over i=2..N (0-indexed: 1..N-1); clamp diff to >= EPS
+    diffs_lo = np.maximum(T_s[1:] - T1, EPS)
+    A1 = float(np.sum(v_s[1:] / (1.0 / diffs_lo + alpha1)))
 
-    term_lower = _stable_ratio(1.0, t_min - t_max, fallback=0.0) + _stable_ratio(1.0 - v_min, 3.0 * max(t_max, EPSILON))
-    term_upper = _stable_ratio(1.0, t_max - t_min, fallback=0.0) + _stable_ratio(v_min, 3.0 * max(t_min, EPSILON))
+    # A_N: sum over i=1..N-1 (0-indexed: 0..N-2); clamp diff to <= -EPS
+    diffs_hi = np.minimum(T_s[:-1] - TN, -EPS)
+    AN = float(np.sum(v_s[:-1] / (1.0 / diffs_hi + alphaN)))
 
-    candidate_a = t_max + _stable_ratio(v_min, term_lower, fallback=0.0)
-    candidate_b = t_min + _stable_ratio(1.0 - v_min, term_upper, fallback=0.0)
+    denom_lo = 1.0 - alpha1 * A1
+    if abs(denom_lo) < EPS:
+        denom_lo = EPS
+    hs_lower = T1 + A1 / denom_lo
 
-    candidates = np.array([candidate_a, candidate_b], dtype=float)
-    candidates = np.nan_to_num(candidates, nan=t_min, posinf=t_max, neginf=t_min)
-    candidates = np.clip(candidates, t_min, t_max)
+    denom_hi = 1.0 - alphaN * AN
+    if abs(denom_hi) < EPS:
+        denom_hi = EPS
+    hs_upper = TN + AN / denom_hi
 
-    hs_lower = _clip_score(float(np.min(candidates)))
-    hs_upper = _clip_score(float(np.max(candidates)))
     return {"hs_lower": hs_lower, "hs_upper": hs_upper}
+
+
+def _compute_taste_bounds(T: np.ndarray, v: np.ndarray) -> dict[str, float]:
+    """Handle trivial cases then dispatch to compute_rv and compute_hs."""
+    N = len(T)
+    if N == 0:
+        return {"rv_lower": 0.0, "rv_upper": 0.0, "hs_lower": 0.0, "hs_upper": 0.0}
+    if N == 1:
+        val = float(T[0])
+        return {"rv_lower": val, "rv_upper": val, "hs_lower": val, "hs_upper": val}
+    if float(np.max(T) - np.min(T)) < EPS:
+        val = float(np.dot(v, T))
+        return {"rv_lower": val, "rv_upper": val, "hs_lower": val, "hs_upper": val}
+    rv = compute_rv(T, v)
+    hs = compute_hs(T, v)
+    return {**rv, **hs}
 
 
 def _actual_scores(recipe: dict[str, Any]) -> dict[str, float]:
@@ -188,43 +174,40 @@ def _actual_scores(recipe: dict[str, Any]) -> dict[str, float]:
 
 
 def build_recipe_record(recipe: dict[str, Any]) -> dict[str, Any]:
-    """Compute all requested bounds and Voigt prediction errors for one recipe."""
+    """Compute canonical bounds for one recipe."""
     ingredients = recipe.get("ingredients", [])
     weights = normalize_weights(ingredients)
     actual = _actual_scores(recipe)
 
-    prediction: dict[str, float] = {}
-    errors: dict[str, dict[str, float | None]] = {}
-    bounds: dict[str, dict[str, float]] = {}
-
+    bounds: dict[str, dict[str, float | None]] = {}
     for dimension in SENSORY_DIMENSIONS:
         scores = _extract_dimension_scores(ingredients, dimension)
-        rv_bounds = compute_rv(scores, weights)
-        hs_bounds = compute_hs(scores, weights)
+        result = _compute_taste_bounds(scores, weights)
+        rv_lo = result["rv_lower"]
+        rv_hi = result["rv_upper"]
+        hs_lo = result["hs_lower"]
+        hs_hi = result["hs_upper"]
 
-        voigt_value = rv_bounds["voigt"]
-        actual_value = actual[dimension]
-        absolute_error = abs(voigt_value - actual_value)
-        squared_error = (voigt_value - actual_value) ** 2
+        # Step 7: log ordering violations without modifying results
+        if not (rv_lo <= hs_lo <= hs_hi <= rv_hi):
+            recipe_id = recipe.get("recipe_id", "?")
+            print(
+                f"[WARN] ordering violated — recipe={recipe_id} dim={dimension}: "
+                f"rv_lower={rv_lo:.6g} hs_lower={hs_lo:.6g} "
+                f"hs_upper={hs_hi:.6g} rv_upper={rv_hi:.6g}"
+            )
 
         bounds[dimension] = {
-            "reuss": _round_float(rv_bounds["reuss"]),
-            "voigt": _round_float(voigt_value),
-            "hs_lower": _round_float(hs_bounds["hs_lower"]),
-            "hs_upper": _round_float(hs_bounds["hs_upper"]),
-        }
-        prediction[dimension] = _round_float(voigt_value)
-        errors[dimension] = {
-            "absolute_error": _round_float(absolute_error),
-            "squared_error": _round_float(squared_error),
+            "rv_lower": _round_float(rv_lo),
+            "rv_upper": _round_float(rv_hi),
+            "hs_lower": _round_float(hs_lo),
+            "hs_upper": _round_float(hs_hi),
         }
 
     return {
         "recipe_id": recipe.get("recipe_id"),
         "recipe_name": recipe.get("recipe_name"),
         "actual": {dimension: _round_float(value) for dimension, value in actual.items()},
-        "prediction": prediction,
-        "errors": errors,
         "bounds": bounds,
     }
 
@@ -234,57 +217,147 @@ def build_dataset_records(raw_recipes: list[dict[str, Any]]) -> list[dict[str, A
     return [build_recipe_record(recipe) for recipe in raw_recipes]
 
 
-def _dataset_summary(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Aggregate Voigt prediction error statistics across the dataset."""
-    summary: dict[str, Any] = {
-        "recipe_count": len(records),
-        "point_prediction": "voigt",
-        "error_metrics": {},
-    }
+def _recipe_label(record: dict[str, Any]) -> str:
+    """Create the readable recipe key used in exported HS/RV files."""
+    recipe_id = record.get("recipe_id") or "UNKNOWN"
+    recipe_name = record.get("recipe_name") or "Unnamed recipe"
+    return f"{recipe_id} - {recipe_name}"
 
-    for dimension in SENSORY_DIMENSIONS:
-        abs_errors = np.array(
-            [record["errors"][dimension]["absolute_error"] for record in records],
-            dtype=float,
-        )
-        sq_errors = np.array(
-            [record["errors"][dimension]["squared_error"] for record in records],
-            dtype=float,
-        )
-        summary["error_metrics"][dimension] = {
-            "mae": _round_float(float(np.mean(abs_errors))) if abs_errors.size else None,
-            "mse": _round_float(float(np.mean(sq_errors))) if sq_errors.size else None,
-            "rmse": _round_float(float(np.sqrt(np.mean(sq_errors)))) if sq_errors.size else None,
+
+def _least_squares_phi(lowers: list[float], uppers: list[float], actuals: list[float]) -> float:
+    """Closed-form least-squares φ clipped to [0, 1].
+
+    φ* = Σ(Δr · (ar - T⁻r)) / Σ(Δr²)
+    where Δr = T⁺r - T⁻r (bound gap), ar = actual, T⁻r = lower bound.
+    """
+    num = 0.0
+    den = 0.0
+    for lo, hi, a in zip(lowers, uppers, actuals):
+        delta = hi - lo
+        num += delta * (a - lo)
+        den += delta * delta
+    if den < EPS:
+        return 0.5
+    return max(0.0, min(1.0, num / den))
+
+
+def _loo_calibrated_predictions(
+    lowers: list[float], uppers: list[float], actuals: list[float]
+) -> list[float]:
+    """LOO calibrated predictions: train φ on N-1 recipes, predict on the held-out one."""
+    n = len(lowers)
+    predictions = []
+    for i in range(n):
+        loo_lowers = lowers[:i] + lowers[i + 1 :]
+        loo_uppers = uppers[:i] + uppers[i + 1 :]
+        loo_actuals = actuals[:i] + actuals[i + 1 :]
+        phi = _least_squares_phi(loo_lowers, loo_uppers, loo_actuals)
+        predictions.append(lowers[i] + phi * (uppers[i] - lowers[i]))
+    return predictions
+
+
+def _pearson_r(ys: list[float], preds: list[float]) -> float:
+    """Pearson correlation coefficient."""
+    n = len(ys)
+    mean_y = sum(ys) / n
+    mean_p = sum(preds) / n
+    num = sum((y - mean_y) * (p - mean_p) for y, p in zip(ys, preds))
+    den = math.sqrt(
+        sum((y - mean_y) ** 2 for y in ys) * sum((p - mean_p) ** 2 for p in preds)
+    )
+    return 0.0 if den < EPS else num / den
+
+
+def _r_squared(ys: list[float], preds: list[float]) -> float:
+    """Coefficient of determination R²."""
+    mean_y = sum(ys) / len(ys)
+    ss_res = sum((y - p) ** 2 for y, p in zip(ys, preds))
+    ss_tot = sum((y - mean_y) ** 2 for y in ys)
+    return 0.0 if ss_tot < EPS else 1.0 - ss_res / ss_tot
+
+
+def _compute_calibration(
+    records: list[dict], lower_key: str, upper_key: str
+) -> dict[str, dict]:
+    """Compute LOO predictions and final φ for each taste dimension."""
+    result: dict[str, dict] = {}
+    for dim in SENSORY_DIMENSIONS:
+        lowers = [float(record["bounds"][dim][lower_key] or 0.0) for record in records]
+        uppers = [float(record["bounds"][dim][upper_key] or 0.0) for record in records]
+        actuals = [float(record["actual"][dim] or 0.0) for record in records]
+        result[dim] = {
+            "loo_preds": _loo_calibrated_predictions(lowers, uppers, actuals),
+            "phi": _least_squares_phi(lowers, uppers, actuals),
         }
+    return result
 
-    return summary
+
+def _report_calibration(
+    records: list[dict], calibration: dict[str, dict], method_name: str
+) -> None:
+    """Print final φ, PCC, and R² per taste dimension."""
+    n = len(records)
+    print(f"\n[{method_name}] Final calibrated φ (fit on all {n} recipes):")
+    for dim in SENSORY_DIMENSIONS:
+        cal = calibration[dim]
+        actuals = [float(record["actual"][dim] or 0.0) for record in records]
+        pcc = _pearson_r(actuals, cal["loo_preds"])
+        r2 = _r_squared(actuals, cal["loo_preds"])
+        print(f"  {dim:8s}: φ={cal['phi']:.4f}  PCC={pcc:.4f}  R²={r2:.4f}")
 
 
-def _payload(method_name: str, records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Build the export payload for one bounds family."""
+def _display_scores(values: dict[str, float | None]) -> dict[str, int | None]:
+    """Convert canonical sensory names into readable legacy display names."""
     return {
-        "method": method_name,
-        "point_prediction": "voigt",
-        "hs_approximation": HS_APPROXIMATION_NOTE,
-        "summary": _dataset_summary(records),
-        "recipes": records,
+        DISPLAY_DIMENSIONS[dimension]: _round_int(values.get(dimension))
+        for dimension in DISPLAY_ORDER
     }
+
+
+def _legacy_hs_export(
+    records: list[dict[str, Any]], calibration: dict[str, dict]
+) -> dict[str, Any]:
+    """Build the readable HS export with LOO-calibrated predictions keyed by recipe label."""
+    payload: dict[str, Any] = {}
+    for i, record in enumerate(records):
+        lower = {d: record["bounds"][d]["hs_lower"] for d in SENSORY_DIMENSIONS}
+        upper = {d: record["bounds"][d]["hs_upper"] for d in SENSORY_DIMENSIONS}
+        prediction = {d: calibration[d]["loo_preds"][i] for d in SENSORY_DIMENSIONS}
+        payload[_recipe_label(record)] = {
+            "Actual": _display_scores(record["actual"]),
+            "HS lower bound": _display_scores(lower),
+            "HS prediction": _display_scores(prediction),
+            "HS upper bound": _display_scores(upper),
+        }
+    return payload
+
+
+def _legacy_rv_export(
+    records: list[dict[str, Any]], calibration: dict[str, dict]
+) -> dict[str, Any]:
+    """Build the readable RV export with LOO-calibrated predictions keyed by recipe label."""
+    payload: dict[str, Any] = {}
+    for i, record in enumerate(records):
+        lower = {d: record["bounds"][d]["rv_lower"] for d in SENSORY_DIMENSIONS}
+        upper = {d: record["bounds"][d]["rv_upper"] for d in SENSORY_DIMENSIONS}
+        prediction = {d: calibration[d]["loo_preds"][i] for d in SENSORY_DIMENSIONS}
+        payload[_recipe_label(record)] = {
+            "Actual": _display_scores(record["actual"]),
+            "RV lower bound": _display_scores(lower),
+            "RV prediction": _display_scores(prediction),
+            "RV upper bound": _display_scores(upper),
+        }
+    return payload
 
 
 def _write_python_export(path: str, variable_name: str, payload: dict[str, Any]) -> None:
     """Write a Python module export for downstream research scripts."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("# Auto-generated by Bounds_project/src/compute_bounds.py\n")
-        handle.write("# Point prediction uses the Voigt weighted mixture.\n")
+        handle.write(f"# {HS_NOTE}\n")
         handle.write(f"{variable_name} = ")
         handle.write(pprint.pformat(payload, indent=4, width=120, sort_dicts=False))
-        handle.write("\n")
-
-
-def _write_json_export(path: str, payload: dict[str, Any]) -> None:
-    """Write a JSON export with the same canonical record structure."""
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, ensure_ascii=False)
         handle.write("\n")
 
 
@@ -294,25 +367,19 @@ def main() -> None:
     raw_recipes = load_attr_from_py(raw_recipes_path, "raw_recipes")
     records = build_dataset_records(raw_recipes)
 
-    hs_payload = _payload("HS", records)
-    rv_payload = _payload("RV", records)
-    combined_payload = {
-        "data_source": os.path.abspath(raw_recipes_path),
-        "point_prediction": "voigt",
-        "hs_approximation": HS_APPROXIMATION_NOTE,
-        "summary": _dataset_summary(records),
-        "recipes": records,
-    }
+    hs_calibration = _compute_calibration(records, "hs_lower", "hs_upper")
+    rv_calibration = _compute_calibration(records, "rv_lower", "rv_upper")
 
-    _write_python_export(HS_OUTPUT_PATH, "hs_predictions", hs_payload)
-    _write_python_export(RV_OUTPUT_PATH, "rv_predictions", rv_payload)
-    _write_json_export(JSON_OUTPUT_PATH, combined_payload)
+    _write_python_export(HS_OUTPUT_PATH, "hs_predictions", _legacy_hs_export(records, hs_calibration))
+    _write_python_export(RV_OUTPUT_PATH, "rv_predictions", _legacy_rv_export(records, rv_calibration))
 
-    print(f"[+] Loaded raw recipes from: {raw_recipes_path}")
+    _report_calibration(records, hs_calibration, "HS")
+    _report_calibration(records, rv_calibration, "RV")
+
+    print(f"\n[+] Loaded raw recipes from: {raw_recipes_path}")
     print(f"[+] Recipes processed: {len(records)}")
     print(f"[+] Wrote HS export: {HS_OUTPUT_PATH}")
     print(f"[+] Wrote RV export: {RV_OUTPUT_PATH}")
-    print(f"[+] Wrote JSON export: {JSON_OUTPUT_PATH}")
 
 
 if __name__ == "__main__":

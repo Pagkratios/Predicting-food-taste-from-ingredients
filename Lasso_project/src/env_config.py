@@ -8,7 +8,8 @@ SRC_DIR = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.abspath(os.path.join(SRC_DIR, os.pardir))
 REPO_ROOT = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir))
 ENV_PATH = os.path.join(REPO_ROOT, ".env")
-DEFAULT_RAW_RECIPES_PATH = os.path.join(PROJECT_ROOT, "data", "raw_recipes.py")
+SHARED_DATA_DIR = os.path.join(REPO_ROOT, "data")
+DEFAULT_RAW_RECIPES_PATH = os.path.join(SHARED_DATA_DIR, "raw_recipes.py")
 
 
 def _strip_quotes(value):

@@ -39,19 +39,22 @@ python3 Lasso_project/src/run_all.py --steps plots --plot-groups gaussians combi
 
 ```
 Bounds_project/
-  hs_predictions.py       # Generated HS bounds export
-  rv_predictions.py       # Generated RV bounds export
-  bounds_predictions.json # Canonical JSON export with both bound families
   src/
     compute_bounds.py     # Standalone HS/RV computation pipeline
     env_config.py         # RAW_RECIPES_PATH loader for Bounds_project
 
+data/
+  raw_recipes.py         # Shared default dataset; preferred RAW_RECIPES_PATH target
+  data_predictions.py    # Shared Lasso prediction store
+  hs_predictions.py      # Generated HS bounds export
+  rv_predictions.py      # Generated RV bounds export
+
 Lasso_project/
   data/
-    raw_recipes.py         # Default dataset; active path comes from RAW_RECIPES_PATH in .env
-    data_predictions.py    # Lasso predictions per recipe (updated by train.py)
-    hs_predictions.py      # Pre-computed Hashin-Shtrikman (HS) bounds predictions
-    rv_predictions.py      # Pre-computed Reuss-Voigt (RV) bounds predictions
+    raw_recipes.py         # Compatibility shim to shared repo-level data/raw_recipes.py
+    data_predictions.py    # Compatibility shim to shared repo-level data/data_predictions.py
+    hs_predictions.py      # Compatibility shim to shared repo-level data/hs_predictions.py
+    rv_predictions.py      # Compatibility shim to shared repo-level data/rv_predictions.py
   src/
     plot_config.py         # Shared plotting configuration (colors, fonts, DPI, helpers)
     preprocess.py          # Normalize weights, standardize features, save .npy files
@@ -78,7 +81,7 @@ Lasso_project/
 
 ## Data Format
 
-The active raw recipe file is configured by `RAW_RECIPES_PATH` in `.env`. It should point to a Python file that exposes `raw_recipes` as a list of dicts:
+The active raw recipe file is configured by `RAW_RECIPES_PATH` in `.env`. It should point to a Python file that exposes `raw_recipes` as a list of dicts. The preferred shared location is `data/raw_recipes.py`:
 
 ```python
 {
@@ -125,9 +128,9 @@ save_figure(fig, "path/to/output.png")
 ## Notes
 
 - All generated outputs under `Lasso_project/results/` and `Lasso_project/data/processed/` are gitignored. Re-run the scripts to regenerate.
-- `Bounds_project/src/compute_bounds.py` is intentionally separate from the Lasso pipeline and writes its own HS/RV exports under `Bounds_project/`.
+- `Bounds_project/src/compute_bounds.py` is intentionally separate from the Lasso pipeline and writes shared HS/RV exports under `data/`.
 - `data_plots.py` supports `--only` so you can regenerate just selected plot groups without touching trained artifacts.
 - `run_all.py` supports `--steps`, `--plot-groups`, and optional `--clean` for selective reruns.
-- `train.py` writes Lasso predictions back into `data_predictions.py`.
-- HS and RV predictions are loaded from separate files (`hs_predictions.py`, `rv_predictions.py`), not computed in this code.
+- `train.py` writes Lasso predictions back into `data/data_predictions.py`.
+- HS and RV predictions are loaded from separate shared files (`data/hs_predictions.py`, `data/rv_predictions.py`).
 - The custom Lasso in `lasso.py` uses soft-thresholding (proximal operator) after each gradient step.

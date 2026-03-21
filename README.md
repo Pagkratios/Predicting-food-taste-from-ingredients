@@ -72,7 +72,7 @@ RAW_RECIPES_PATH from .env
   train.py (model training & evaluation)
     - LOO cross-validation for alpha tuning
     - Train final Lasso models on raw X
-    - Extract HS/RV predictions from data_predictions.py
+    - Extract HS/RV predictions from shared `data/hs_predictions.py` and `data/rv_predictions.py`
     - Generate predicted-vs-actual scatter plots (3x)
     - Generate grouped RMSE boxplot
     - Compute and save 12 evaluation metrics per method
@@ -135,11 +135,10 @@ python Lasso_project/src/run_all.py --steps train
 
 Outputs are written to:
 
-- `Bounds_project/hs_predictions.py`
-- `Bounds_project/rv_predictions.py`
-- `Bounds_project/bounds_predictions.json`
+- `data/hs_predictions.py`
+- `data/rv_predictions.py`
 
-For recipes with more than two ingredients, the HS implementation uses a documented two-phase approximation based on the total normalized weight at the minimum and maximum ingredient sensory values.
+Both HS and RV predictions are calibrated using a least-squares φ parameter (see [φ Calibration](#φ-calibration) below). The generated Python files use a compact legacy-style layout keyed by `recipe_id - recipe_name` for easier inspection.
 
 Dataset path configuration:
 
@@ -148,10 +147,45 @@ cp .env.example .env
 ```
 
 Set `RAW_RECIPES_PATH` in `.env` to either:
-- a repo-relative path such as `Lasso_project/data/raw_recipes.py`
+- a repo-relative path such as `data/raw_recipes.py`
 - or an absolute path to another `raw_recipes.py` file
 
 The repository includes a GitHub Actions workflow that installs from `Lasso_project/requirements.txt` in a fresh environment and runs all three scripts on each push and pull request.
+
+## φ Calibration
+
+For both HS and RV bounds, a single scalar φ ∈ [0, 1] is learned **per taste dimension** to position the prediction between the lower and upper bound:
+
+```
+T* = T⁻ + φ · (T⁺ - T⁻)
+```
+
+### Closed-form least-squares solution
+
+φ is chosen to minimise the squared prediction error over all recipes. The closed-form solution is:
+
+```
+φ* = Σ(Δr · (ar − T⁻r)) / Σ(Δr²),  clipped to [0, 1]
+```
+
+where:
+- `Δr = T⁺r − T⁻r` — bound gap for recipe r
+- `ar` — actual taste score for recipe r
+- `T⁻r` — lower bound for recipe r
+
+When `Σ(Δr²) < EPS` (all bounds are degenerate), φ defaults to 0.5.
+
+### Cross-validation
+
+φ is estimated with **Leave-One-Out (LOO) cross-validation** over the full dataset (70 recipes):
+
+1. For each recipe r, fit φ on the remaining 69 recipes using the closed-form above.
+2. Predict recipe r as `T⁻r + φ_loo · Δr`.
+3. Repeat for all 70 recipes, producing exactly 70 LOO predictions — matching the Lasso output size exactly.
+
+The **final exported φ** values are fit on all 70 recipes (full-data estimate) and reported alongside PCC and R² for the LOO predictions.
+
+This calibration is applied identically to both the HS bounds (`hs_lower`, `hs_upper`) and the RV bounds (`rv_lower`, `rv_upper`).
 
 ## Outputs
 
@@ -220,18 +254,20 @@ Recipe_formulation/
   README.md
   CLAUDE.md
   .gitignore
+  data/
+    raw_recipes.py          # Shared default recipe dataset
+    data_predictions.py     # Shared prediction store used by training
+    hs_predictions.py       # Bounds_project-generated HS export
+    rv_predictions.py       # Bounds_project-generated RV export
   Bounds_project/
-    hs_predictions.py        # Generated HS export
-    rv_predictions.py        # Generated RV export
-    bounds_predictions.json  # Canonical JSON export
     src/
       compute_bounds.py      # Standalone HS/RV bounds generator
       env_config.py          # RAW_RECIPES_PATH resolution for Bounds_project
   Lasso_project/
     requirements.txt
     data/
-      raw_recipes.py          # Default recipe dataset; active file is selected via .env
-      data_predictions.py     # HS/RV/Lasso predictions (updated by train.py)
+      raw_recipes.py          # Compatibility shim to shared repo-level data/raw_recipes.py
+      data_predictions.py     # Compatibility shim to shared repo-level data/data_predictions.py
     src/
       preprocess.py           # Data preprocessing pipeline
       data_plots.py           # Exploratory data analysis plots

@@ -32,6 +32,7 @@ from env_config import get_raw_recipes_path
 # ---------------- Config & Paths ----------------
 PROJECT_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 DATA_DIR        = os.path.join(PROJECT_ROOT, "data")
+SHARED_DATA_DIR = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir, "data"))
 PROC_DIR        = os.path.join(DATA_DIR, "processed")
 SRC2_RESULTS    = os.path.join(PROJECT_ROOT, "results")
 MODELS_DIR      = os.path.join(SRC2_RESULTS, "models")
@@ -43,7 +44,7 @@ os.makedirs(PLOTS_DIR, exist_ok=True)
 os.makedirs(METRICS_DIR, exist_ok=True)
 
 RECIPE_FILE = get_raw_recipes_path()
-PRED_FILE   = os.path.join(DATA_DIR, "data_predictions.py")
+PRED_FILE   = os.path.join(SHARED_DATA_DIR, "data_predictions.py")
 X_FILE      = os.path.join(PROC_DIR, "X_train.npy")
 Y_FILE      = os.path.join(PROC_DIR, "Y_train.npy")
 MODEL_FILE  = os.path.join(MODELS_DIR, "final_models.pkl")
@@ -56,8 +57,8 @@ from plot_config import (
 )
 
 # Paths for Hashin-Shtrikman and Reuss-Voigt prediction data
-HS_PRED_FILE = os.path.join(DATA_DIR, "hs_predictions.py")
-RV_PRED_FILE = os.path.join(DATA_DIR, "rv_predictions.py")
+HS_PRED_FILE = os.path.join(SHARED_DATA_DIR, "hs_predictions.py")
+RV_PRED_FILE = os.path.join(SHARED_DATA_DIR, "rv_predictions.py")
 
 # ---------------- Utils & Loaders ----------------
 def load_attr_from_py(filepath, variable_name):
