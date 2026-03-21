@@ -188,22 +188,16 @@ def _research_ingredient(name: str) -> dict:
       Low    – no sources; predicted from food science knowledge
     """
     def _parse_result(text: str) -> dict | None:
-        text = text.strip()
-        if "```" in text:
-            text = text.split("```")[1]
-            if text.lower().startswith("json"):
-                text = text[4:]
-            text = text.strip()
-        # Extract JSON object (may be embedded in prose)
-        m = re.search(r'\{[^{}]*"sweet"[^{}]*\}', text, re.DOTALL)
-        if m:
-            text = m.group()
-        try:
-            result = json.loads(text)
-            if all(k in result for k in ("sweet", "sour", "bitter", "umami", "salty", "confidence")):
-                return result
-        except Exception:
-            pass
+        decoder = json.JSONDecoder()
+        for i, ch in enumerate(text):
+            if ch != '{':
+                continue
+            try:
+                obj, _ = decoder.raw_decode(text, i)
+                if all(k in obj for k in ("sweet", "sour", "bitter", "umami", "salty", "confidence")):
+                    return obj
+            except json.JSONDecodeError:
+                continue
         return None
 
     prompt = (
