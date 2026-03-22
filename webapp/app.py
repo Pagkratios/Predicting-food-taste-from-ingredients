@@ -5,6 +5,7 @@ Flask web app for sensory score prediction using the Lasso model.
 
 import json
 import re
+import uuid as _uuid
 from dotenv import load_dotenv
 load_dotenv()
 import os
@@ -47,6 +48,9 @@ SENSORY_ORDER = ["sweet", "bitter", "salty", "umami", "sour"]
 sys.path.insert(0, WEBAPP_DIR)
 
 app = Flask(__name__)
+
+# ── In-memory session store ────────────────────────────────────────────────────
+_sessions: dict = {}
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
@@ -707,6 +711,154 @@ def predict():
         return jsonify({"error": f"Could not parse recipe JSON from Claude: {exc}"}), 422
     except Exception as exc:  # noqa: BLE001
         return jsonify({"error": str(exc)}), 500
+
+
+# ── Prediction helper (reused by /predict and /chat) ─────────────────────────
+
+def _run_prediction_from_recipe(recipe: dict) -> tuple[dict, dict]:
+    """Run Lasso prediction on an already-enriched recipe. Normalises weights in-place."""
+    all_norm = _normalize_weights(recipe["ingredients"])
+    raw_vec  = _compute_feature_vector(all_norm)
+    std_vec  = _standardize(raw_vec)
+    x        = std_vec.reshape(1, -1)
+
+    predictions: dict = {}
+    confidence:  dict = {}
+    for taste in SENSORY_ORDER:
+        pred  = float(_models[taste].predict(x)[0])
+        pred  = max(0.0, min(100.0, pred))
+        rmse  = _rmse.get(taste, 0.0)
+        predictions[taste] = round(pred, 1)
+        confidence[taste]  = {
+            "lower": round(max(0.0, pred - rmse), 1),
+            "upper": round(min(100.0, pred + rmse), 1),
+        }
+
+    recipe["ingredients"] = all_norm
+    return predictions, confidence
+
+
+# ── Chat system prompt ─────────────────────────────────────────────────────────
+
+_CHAT_SYSTEM = (
+    "You are FlavorLab's recipe assistant. You help users explore how ingredient "
+    "changes affect the predicted sensory profile (sweet, bitter, salty, umami, sour).\n\n"
+    "You can:\n"
+    "- Modify ingredient weights/proportions\n"
+    "- Add new ingredients\n"
+    "- Remove ingredients\n"
+    "- Answer questions about the predictions and food science\n\n"
+    "CRITICAL: Always respond with ONLY a valid JSON object (no markdown, no code blocks):\n"
+    '{"reply":"<natural language>","action":"modify_recipe" or "answer","updated_recipe":null or {...}}\n\n'
+    "If modifying (action=modify_recipe): return updated_recipe with the FULL ingredients list. "
+    "Keep all existing fields (sensory_scores, source, confidence, evidence, matched_name) unchanged "
+    "for existing ingredients. For brand-new ingredients, include only name and weight — the server "
+    "will look them up. Weights do NOT need to sum to 1.0; the server normalises automatically.\n\n"
+    "If only answering a question (action=answer): set updated_recipe to null.\n\n"
+    'updated_recipe format: {"recipe_name":"...","ingredients":[{"name":"...","weight":<float>,...}]}'
+)
+
+
+# ── Chat route ─────────────────────────────────────────────────────────────────
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    try:
+        data       = request.get_json(force=True)
+        message    = (data.get("message") or "").strip()
+        recipe     = data.get("recipe")        # current enriched recipe (may be None)
+        history    = data.get("chat_history") or []
+        session_id = data.get("session_id") or str(_uuid.uuid4())
+
+        if not message:
+            return jsonify({"error": "No message provided"}), 400
+
+        # Build system prompt with live recipe context
+        system = _CHAT_SYSTEM
+        if recipe:
+            ings  = recipe.get("ingredients", [])
+            lines = "\n".join(
+                f"  - {i['name']}: {i['weight'] * 100:.1f}%"
+                for i in ings
+            )
+            system += (
+                f"\n\nCurrent recipe: {recipe.get('recipe_name', 'Unknown')}\n"
+                f"Ingredients:\n{lines}"
+            )
+
+        # Build Claude message list from history + new message
+        messages = []
+        for h in history:
+            role    = h.get("role", "user")
+            content = h.get("text", "")
+            if role in ("user", "assistant") and content:
+                messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": message})
+
+        response = anthropic.Anthropic().messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=2048,
+            system=system,
+            messages=messages,
+        )
+
+        raw = response.content[0].text.strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1]
+            if raw.lower().startswith("json"):
+                raw = raw[4:]
+            raw = raw.strip()
+
+        result         = json.loads(raw)
+        reply          = result.get("reply", "I couldn't process that request.")
+        action         = result.get("action", "answer")
+        updated_recipe = result.get("updated_recipe")
+
+        if action == "modify_recipe" and updated_recipe and updated_recipe.get("ingredients"):
+            # Enrich any brand-new ingredients (those without sensory_scores)
+            new_ings = [i for i in updated_recipe["ingredients"] if not i.get("sensory_scores")]
+            if new_ings:
+                enriched     = enrich_ingredients(new_ings)
+                enriched_map = {i["name"]: i for i in enriched}
+                for ing in updated_recipe["ingredients"]:
+                    if not ing.get("sensory_scores") and ing["name"] in enriched_map:
+                        ing.update(enriched_map[ing["name"]])
+
+            new_predictions, new_confidence = _run_prediction_from_recipe(updated_recipe)
+            return jsonify({
+                "reply":       reply,
+                "action":      action,
+                "recipe":      updated_recipe,
+                "predictions": new_predictions,
+                "confidence":  new_confidence,
+            })
+
+        return jsonify({"reply": reply, "action": "answer"})
+
+    except json.JSONDecodeError as exc:
+        return jsonify({"error": f"Could not parse Claude response: {exc}"}), 422
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+# ── Session routes ─────────────────────────────────────────────────────────────
+
+@app.route("/session/save", methods=["POST"])
+def session_save():
+    data       = request.get_json(force=True)
+    session_id = data.get("session_id")
+    state      = data.get("state", {})
+    if session_id:
+        _sessions[session_id] = state
+    return jsonify({"ok": True})
+
+
+@app.route("/session/<session_id>", methods=["GET"])
+def session_get(session_id):
+    state = _sessions.get(session_id)
+    if state is None:
+        return jsonify({"ok": False}), 404
+    return jsonify({"ok": True, "state": state})
 
 
 if __name__ == "__main__":

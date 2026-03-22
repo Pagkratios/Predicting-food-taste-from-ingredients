@@ -14,151 +14,183 @@
 </head>
 <body class="state-initial">
 
-<!-- ── Fixed app bar (shown in loading + results states) ───────────────── -->
-<header class="app-bar" id="appBar">
-  <a class="app-brand" href="/">
-    <div class="brand-logo">
-      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+<div class="app-shell">
+
+  <!-- ── LEFT: Chat Panel ────────────────────────────────────────────────── -->
+  <div class="chat-panel" id="chatPanel">
+
+    <div class="chat-panel-header">
+      <a class="app-brand" href="/">
+        <div class="brand-logo">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        FlavorLab
+      </a>
+      <button class="new-chat-btn" id="newChatBtn" type="button">+ New chat</button>
     </div>
-    FlavorLab
-  </a>
-</header>
 
-<!-- ── Center view: hero + search (initial & loading states) ───────────── -->
-<div class="center-view" id="centerView">
-
-  <!-- Hero (initial state only) -->
-  <div class="hero-content" id="heroContent">
-    <div class="hero-icon">
-      <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-    </div>
-    <h1>FlavorLab</h1>
-    <p class="hero-sub">Paste a recipe, drop a file, or link a URL — we'll predict the full sensory profile.</p>
-    <div class="flavour-dots" aria-hidden="true">
-      <div class="flavour-dot" data-sense="sweet"  title="Sweet"></div>
-      <div class="flavour-dot" data-sense="bitter" title="Bitter"></div>
-      <div class="flavour-dot" data-sense="salty"  title="Salty"></div>
-      <div class="flavour-dot" data-sense="umami"  title="Umami"></div>
-      <div class="flavour-dot" data-sense="sour"   title="Sour"></div>
-    </div>
-  </div>
-
-  <!-- Chat-style search input -->
-  <div class="search-wrap" id="searchWrap">
-    <div class="chat-input-box" id="chatInputBox">
-      <button class="attach-btn" id="attachBtn" type="button" title="Attach file">
-        <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
-      <input type="file" id="fileInput" accept=".txt,.pdf,.docx" aria-label="Upload recipe file" />
-      <textarea id="mainInput" placeholder="Analyze a food, image, or URL..." rows="1" aria-label="Recipe input"></textarea>
-      <button class="submit-btn" id="submitBtn" type="button" aria-label="Analyse">
-        <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-      </button>
-    </div>
-    <div class="file-chip" id="fileChip">
-      <svg viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      <span id="fileChipName"></span>
-      <button class="file-chip-remove" id="fileChipRemove" type="button" aria-label="Remove file">×</button>
-    </div>
-  </div>
-
-  <!-- Error banner -->
-  <div class="error-banner" id="errorBanner" role="alert">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    <span id="errorMsg"></span>
-  </div>
-
-  <!-- Inline loading steps (loading state) -->
-  <div class="steps-panel" id="stepsPanel">
-    <ul class="step-list" id="stepList">
-      <li><span class="step-icon"></span>Sending to Claude AI</li>
-      <li><span class="step-icon"></span>Extracting structured ingredients</li>
-      <li><span class="step-icon"></span>Querying sensory database</li>
-      <li><span class="step-icon"></span>Researching unknown ingredients</li>
-      <li><span class="step-icon"></span>Running Lasso models</li>
-      <li><span class="step-icon"></span>Finding dish image &amp; description</li>
-    </ul>
-  </div>
-
-</div><!-- /center-view -->
-
-<!-- ── Results layout (results state) 25% / 75% ───────────────────────── -->
-<main class="results-layout" id="resultsLayout" aria-label="Prediction results">
-
-  <!-- LEFT 25%: summary sidebar -->
-  <aside class="summary-panel">
-
-    <div class="dish-image-wrap" id="dishImageWrap">
-      <div class="dish-placeholder">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-        <span>No image found</span>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-welcome" id="chatWelcome">
+        <div class="chat-welcome-icon">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <p class="chat-welcome-title">FlavorLab Assistant</p>
+        <p class="chat-welcome-sub">Submit a recipe on the right to get started. I can help you explore how changing ingredient proportions affects the predicted sensory profile.</p>
+        <ul class="chat-welcome-hints">
+          <li>"Increase sugar to 25%"</li>
+          <li>"Remove the butter"</li>
+          <li>"Add 10% olive oil"</li>
+          <li>"Why is this so bitter?"</li>
+        </ul>
       </div>
     </div>
 
-    <div class="dish-meta">
-      <h2 id="dishName"></h2>
-      <p class="dish-desc" id="dishDescription"></p>
-    </div>
-
-
-  </aside>
-
-  <!-- RIGHT 75%: analysis dashboard -->
-  <section class="analysis-panel">
-
-    <!-- Confidence row -->
-    <div class="confidence-row">
-      <span class="conf-label">Model Confidence</span>
-      <div class="conf-bar-wrap">
-        <div class="conf-bar" id="confidenceBar"></div>
-      </div>
-      <span class="conf-pct" id="confidencePct">—</span>
-    </div>
-
-    <!-- Radar chart -->
-    <div class="analysis-card">
-      <div class="section-label">Flavour Profile</div>
-      <div class="chart-canvas-wrap">
-        <canvas id="radarCanvas" width="360" height="360" aria-label="Radar chart of predicted sensory scores"></canvas>
+    <div class="chat-input-area">
+      <div class="bot-input-box" id="botInputBox">
+        <textarea id="botInput" placeholder="Ask about the recipe..." rows="1"
+          disabled aria-label="Chat with FlavorLab assistant"></textarea>
+        <button class="submit-btn chat-send-btn" id="chatSendBtn" type="button"
+          disabled aria-label="Send message">
+          <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
       </div>
     </div>
 
-    <!-- Score gauges -->
-    <div class="analysis-card">
-      <div class="section-label">
-        Predicted Scores
-        <span id="recipeName" class="recipe-name-badge"></span>
-      </div>
-      <div class="score-legend">
-        <span>Score / 100</span>
-        <span style="border-left:1px solid var(--border);padding-left:12px">Range = predicted ± RMSE</span>
-      </div>
-      <div id="scoresContainer"></div>
-    </div>
+  </div><!-- /chat-panel -->
 
-    <!-- Ingredient detail table -->
-    <div class="analysis-card">
-      <div class="section-label">Ingredient Details</div>
-      <div style="overflow-x:auto">
-        <table class="data-table" aria-label="Ingredient breakdown">
-          <thead>
-            <tr>
-              <th>Ingredient</th>
-              <th>Weight</th>
-              <th>Source</th>
-              <th>Confidence</th>
-              <th>Evidence</th>
-              <th>Sensory profile</th>
-            </tr>
-          </thead>
-          <tbody id="ingredientTbody"></tbody>
-        </table>
+  <!-- ── RIGHT: Main Panel ──────────────────────────────────────────────── -->
+  <div class="main-panel" id="mainPanel">
+
+    <!-- Center view: hero + recipe input (initial & loading states) -->
+    <div class="center-view" id="centerView">
+
+      <div class="hero-content" id="heroContent">
+        <div class="hero-icon">
+          <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>
+        <h1>FlavorLab</h1>
+        <p class="hero-sub">Paste a recipe, drop a file, or link a URL — we'll predict the full sensory profile.</p>
+        <div class="flavour-dots" aria-hidden="true">
+          <div class="flavour-dot" data-sense="sweet"  title="Sweet"></div>
+          <div class="flavour-dot" data-sense="bitter" title="Bitter"></div>
+          <div class="flavour-dot" data-sense="salty"  title="Salty"></div>
+          <div class="flavour-dot" data-sense="umami"  title="Umami"></div>
+          <div class="flavour-dot" data-sense="sour"   title="Sour"></div>
+        </div>
       </div>
-    </div>
 
-  </section>
+      <div class="search-wrap" id="searchWrap">
+        <div class="chat-input-box" id="recipeInputBox">
+          <button class="attach-btn" id="attachBtn" type="button" title="Attach file">
+            <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <input type="file" id="fileInput" accept=".txt,.pdf,.docx" aria-label="Upload recipe file" />
+          <textarea id="mainInput" placeholder="Paste a recipe, enter a URL, or describe a dish..." rows="1" aria-label="Recipe input"></textarea>
+          <button class="submit-btn" id="submitBtn" type="button" aria-label="Analyse">
+            <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </button>
+        </div>
+        <div class="file-chip" id="fileChip">
+          <svg viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span id="fileChipName"></span>
+          <button class="file-chip-remove" id="fileChipRemove" type="button" aria-label="Remove file">×</button>
+        </div>
+      </div>
 
-</main>
+      <div class="error-banner" id="errorBanner" role="alert">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        <span id="errorMsg"></span>
+      </div>
+
+      <div class="steps-panel" id="stepsPanel">
+        <ul class="step-list" id="stepList">
+          <li><span class="step-icon"></span>Sending to Claude AI</li>
+          <li><span class="step-icon"></span>Extracting structured ingredients</li>
+          <li><span class="step-icon"></span>Querying sensory database</li>
+          <li><span class="step-icon"></span>Researching unknown ingredients</li>
+          <li><span class="step-icon"></span>Running Lasso models</li>
+          <li><span class="step-icon"></span>Finding dish image &amp; description</li>
+        </ul>
+      </div>
+
+    </div><!-- /center-view -->
+
+    <!-- Results (results state) -->
+    <main class="results-layout" id="resultsLayout" aria-label="Prediction results">
+
+      <!-- TOP: dish image + info (horizontal) -->
+      <div class="dish-top-card">
+        <div class="dish-image-wrap" id="dishImageWrap">
+          <div class="dish-placeholder">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            <span>No image found</span>
+          </div>
+        </div>
+
+        <div class="dish-info-right">
+          <h2 id="dishName"></h2>
+          <p class="dish-desc" id="dishDescription"></p>
+          <div class="fraction-header">Ingredients &amp; Volume Fractions</div>
+          <div id="ingredientFractionList" class="ingredient-fraction-list"></div>
+        </div>
+      </div>
+
+      <!-- ANALYSIS: confidence + charts + table -->
+      <div class="analysis-section">
+
+        <div class="confidence-row">
+          <span class="conf-label">Model Confidence</span>
+          <div class="conf-bar-wrap">
+            <div class="conf-bar" id="confidenceBar"></div>
+          </div>
+          <span class="conf-pct" id="confidencePct">—</span>
+        </div>
+
+        <div class="analysis-card">
+          <div class="section-label">Flavour Profile</div>
+          <div class="chart-canvas-wrap">
+            <canvas id="radarCanvas" width="360" height="360" aria-label="Radar chart of predicted sensory scores"></canvas>
+          </div>
+        </div>
+
+        <div class="analysis-card">
+          <div class="section-label">
+            Predicted Scores
+            <span id="recipeName" class="recipe-name-badge"></span>
+          </div>
+          <div class="score-legend">
+            <span>Score / 100</span>
+            <span style="border-left:1px solid var(--border);padding-left:12px">Range = predicted ± RMSE</span>
+          </div>
+          <div id="scoresContainer"></div>
+        </div>
+
+        <div class="analysis-card">
+          <div class="section-label">Ingredient Details</div>
+          <div style="overflow-x:auto">
+            <table class="data-table" aria-label="Ingredient breakdown">
+              <thead>
+                <tr>
+                  <th>Ingredient</th>
+                  <th>Weight</th>
+                  <th>Source</th>
+                  <th>Confidence</th>
+                  <th>Evidence</th>
+                  <th>Sensory profile</th>
+                </tr>
+              </thead>
+              <tbody id="ingredientTbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /analysis-section -->
+
+    </main><!-- /results-layout -->
+
+  </div><!-- /main-panel -->
+
+</div><!-- /app-shell -->
 
 <script src="/static/main.js"></script>
 </body>

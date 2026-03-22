@@ -1,10 +1,10 @@
 /* FlavorLab – main.js */
 
-const SENSES = ['sweet', 'bitter', 'salty', 'umami', 'sour'];
-const SENSE_COLORS  = { sweet:'#4477AA', bitter:'#EE6677', salty:'#228833', umami:'#CCBB44', sour:'#AA3377' };
-const SENSE_LABELS  = { sweet:'Sweet', bitter:'Bitter', salty:'Salty', umami:'Umami', sour:'Sour' };
+const SENSES      = ['sweet', 'bitter', 'salty', 'umami', 'sour'];
+const SENSE_COLORS = { sweet:'#4477AA', bitter:'#EE6677', salty:'#228833', umami:'#CCBB44', sour:'#AA3377' };
+const SENSE_LABELS = { sweet:'Sweet', bitter:'Bitter', salty:'Salty', umami:'Umami', sour:'Sour' };
 
-// DOM refs
+// ── DOM refs ──────────────────────────────────────────────────────────────────
 const mainInput      = document.getElementById('mainInput');
 const submitBtn      = document.getElementById('submitBtn');
 const attachBtn      = document.getElementById('attachBtn');
@@ -12,7 +12,7 @@ const fileInput      = document.getElementById('fileInput');
 const fileChip       = document.getElementById('fileChip');
 const fileChipName   = document.getElementById('fileChipName');
 const fileChipRemove = document.getElementById('fileChipRemove');
-const chatInputBox   = document.getElementById('chatInputBox');
+const recipeInputBox = document.getElementById('recipeInputBox');
 const centerView     = document.getElementById('centerView');
 const heroContent    = document.getElementById('heroContent');
 const stepsPanel     = document.getElementById('stepsPanel');
@@ -20,17 +20,164 @@ const stepListEl     = document.getElementById('stepList');
 const resultsLayout  = document.getElementById('resultsLayout');
 const errorBanner    = document.getElementById('errorBanner');
 const errorMsg       = document.getElementById('errorMsg');
+const chatMessages   = document.getElementById('chatMessages');
+const botInput       = document.getElementById('botInput');
+const chatSendBtn    = document.getElementById('chatSendBtn');
+const newChatBtn     = document.getElementById('newChatBtn');
 
-let radarChart  = null;
-let stepTimer   = null;
-let currentFile = null;
+let radarChart     = null;
+let stepTimer      = null;
+let currentFile    = null;
 
-// ── State machine ──────────────────────────────────────────────────────────
-// All display toggling is done via inline styles (avoids CSS specificity fights).
-// CSS classes on <body> drive layout/positioning only (not display).
+// ── Session state ─────────────────────────────────────────────────────────────
+let sessionId          = null;
+let currentRecipe      = null;
+let currentPredictions = null;
+let currentConfidence  = null;
+let currentDishInfo    = null;
+let chatHistory        = [];  // [{role:'user'|'assistant', text:'...'}]
 
+// ── Welcome HTML (reused when starting a new chat) ───────────────────────────
+const WELCOME_HTML = `
+  <div class="chat-welcome-icon">
+    <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+  </div>
+  <p class="chat-welcome-title">FlavorLab Assistant</p>
+  <p class="chat-welcome-sub">Submit a recipe on the right to get started. I can help you explore how changing ingredient proportions affects the predicted sensory profile.</p>
+  <ul class="chat-welcome-hints">
+    <li>"Increase sugar to 25%"</li>
+    <li>"Remove the butter"</li>
+    <li>"Add 10% olive oil"</li>
+    <li>"Why is this so bitter?"</li>
+  </ul>`;
+
+// ── UUID helper ───────────────────────────────────────────────────────────────
+function generateUUID() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── Session persistence ───────────────────────────────────────────────────────
+function initSession() {
+  sessionId = localStorage.getItem('flavorlab_session_id');
+  if (!sessionId) {
+    sessionId = generateUUID();
+    localStorage.setItem('flavorlab_session_id', sessionId);
+  }
+
+  const savedState = localStorage.getItem('flavorlab_state');
+  if (savedState === 'results') {
+    try {
+      const r = localStorage.getItem('flavorlab_recipe');
+      const p = localStorage.getItem('flavorlab_predictions');
+      const c = localStorage.getItem('flavorlab_confidence');
+      const d = localStorage.getItem('flavorlab_dish_info');
+      const h = localStorage.getItem('flavorlab_chat');
+      if (r && p && c) {
+        currentRecipe      = JSON.parse(r);
+        currentPredictions = JSON.parse(p);
+        currentConfidence  = JSON.parse(c);
+        currentDishInfo    = d ? JSON.parse(d) : null;
+        chatHistory        = h ? JSON.parse(h) : [];
+        restoreResults();
+      }
+    } catch (_) {
+      // Corrupted storage — start fresh
+      clearLocalStorage();
+    }
+  }
+}
+
+function saveSession() {
+  localStorage.setItem('flavorlab_state',       'results');
+  localStorage.setItem('flavorlab_recipe',      JSON.stringify(currentRecipe));
+  localStorage.setItem('flavorlab_predictions', JSON.stringify(currentPredictions));
+  localStorage.setItem('flavorlab_confidence',  JSON.stringify(currentConfidence));
+  if (currentDishInfo) {
+    localStorage.setItem('flavorlab_dish_info', JSON.stringify(currentDishInfo));
+  }
+  localStorage.setItem('flavorlab_chat', JSON.stringify(chatHistory));
+
+  // Persist to server (fire-and-forget backup)
+  fetch('/session/save', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      session_id: sessionId,
+      state: {
+        recipe:       currentRecipe,
+        predictions:  currentPredictions,
+        confidence:   currentConfidence,
+        dish_info:    currentDishInfo,
+        chat_history: chatHistory,
+      },
+    }),
+  }).catch(() => {});
+}
+
+function clearLocalStorage() {
+  const keys = [
+    'flavorlab_state', 'flavorlab_recipe', 'flavorlab_predictions',
+    'flavorlab_confidence', 'flavorlab_dish_info', 'flavorlab_chat',
+  ];
+  keys.forEach(k => localStorage.removeItem(k));
+}
+
+function restoreResults() {
+  buildDishInfo(currentDishInfo, currentRecipe.recipe_name);
+  buildIngredientFractions(currentRecipe.ingredients);
+  buildRecipeTable(currentRecipe);
+  buildScoresTable(currentPredictions, currentConfidence);
+  buildRadar(currentPredictions, currentConfidence);
+  renderConfidence(currentRecipe.ingredients);
+  document.getElementById('recipeName').textContent = currentRecipe.recipe_name;
+
+  // Restore chat messages
+  chatHistory.forEach(msg => _appendBubble(msg.role, msg.text));
+
+  setState('results');
+}
+
+// ── New chat ──────────────────────────────────────────────────────────────────
+function newChat() {
+  clearLocalStorage();
+  sessionId = generateUUID();
+  localStorage.setItem('flavorlab_session_id', sessionId);
+
+  currentRecipe      = null;
+  currentPredictions = null;
+  currentConfidence  = null;
+  currentDishInfo    = null;
+  chatHistory        = [];
+
+  // Reset chat panel
+  chatMessages.innerHTML = '';
+  const welcome = document.createElement('div');
+  welcome.id        = 'chatWelcome';
+  welcome.className = 'chat-welcome';
+  welcome.innerHTML = WELCOME_HTML;
+  chatMessages.appendChild(welcome);
+
+  // Reset recipe input
+  mainInput.value = '';
+  hideFileChip();
+  hideError();
+
+  setState('initial');
+}
+
+newChatBtn.addEventListener('click', newChat);
+
+// ── State machine ─────────────────────────────────────────────────────────────
 function setState(state) {
   document.body.className = `state-${state}`;
+
+  const chatEnabled = state === 'results';
+  botInput.disabled   = !chatEnabled;
+  chatSendBtn.disabled = !chatEnabled;
+  botInput.placeholder = chatEnabled ? 'Ask about the recipe...' : 'Submit a recipe to get started...';
 
   if (state === 'initial') {
     centerView.style.display    = '';
@@ -47,7 +194,6 @@ function setState(state) {
   }
 
   if (state === 'loading') {
-    // Fade + slide hero out
     heroContent.style.transition = 'opacity 0.25s ease, transform 0.3s ease';
     heroContent.style.opacity    = '0';
     heroContent.style.transform  = 'translateY(-14px)';
@@ -57,19 +203,16 @@ function setState(state) {
       }
     }, 310);
 
-    centerView.style.display    = '';
-    centerView.style.opacity    = '1';
-    stepsPanel.style.display    = 'block';
-    stepsPanel.style.animation  = 'none'; // reset then re-trigger
-    requestAnimationFrame(() => {
-      stepsPanel.style.animation = '';
-    });
+    centerView.style.display   = '';
+    centerView.style.opacity   = '1';
+    stepsPanel.style.display   = 'block';
+    stepsPanel.style.animation = 'none';
+    requestAnimationFrame(() => { stepsPanel.style.animation = ''; });
     resultsLayout.style.display = 'none';
     submitBtn.disabled = true;
   }
 
   if (state === 'results') {
-    // Fade center-view out
     centerView.style.transition = 'opacity 0.25s ease';
     centerView.style.opacity    = '0';
     setTimeout(() => {
@@ -78,8 +221,7 @@ function setState(state) {
       }
     }, 270);
 
-    // Fade results in
-    resultsLayout.style.display    = 'grid';
+    resultsLayout.style.display    = 'block';
     resultsLayout.style.opacity    = '0';
     resultsLayout.style.transition = '';
     requestAnimationFrame(() => {
@@ -90,7 +232,7 @@ function setState(state) {
   }
 }
 
-// ── Step animation ─────────────────────────────────────────────────────────
+// ── Step animation ────────────────────────────────────────────────────────────
 const stepEls = Array.from(stepListEl.querySelectorAll('li'));
 
 function startSteps() {
@@ -112,7 +254,7 @@ function stopSteps() {
   stepEls.forEach(el => el.classList.add('done'));
 }
 
-// ── Error ──────────────────────────────────────────────────────────────────
+// ── Error ─────────────────────────────────────────────────────────────────────
 function showError(msg) {
   errorMsg.textContent = msg;
   errorBanner.classList.add('visible');
@@ -121,7 +263,7 @@ function hideError() {
   errorBanner.classList.remove('visible');
 }
 
-// ── File chip ──────────────────────────────────────────────────────────────
+// ── File chip ─────────────────────────────────────────────────────────────────
 function showFileChip(name) {
   fileChipName.textContent = name;
   fileChip.classList.add('visible');
@@ -139,11 +281,11 @@ fileInput.addEventListener('change', () => {
   if (f) { currentFile = f; showFileChip(f.name); }
 });
 
-// ── Drag and drop on chat input ────────────────────────────────────────────
-chatInputBox.addEventListener('dragover', e => { e.preventDefault(); chatInputBox.classList.add('drag-over'); });
-chatInputBox.addEventListener('dragleave', () => chatInputBox.classList.remove('drag-over'));
-chatInputBox.addEventListener('drop', e => {
-  e.preventDefault(); chatInputBox.classList.remove('drag-over');
+// ── Drag and drop on recipe input ─────────────────────────────────────────────
+recipeInputBox.addEventListener('dragover', e => { e.preventDefault(); recipeInputBox.classList.add('drag-over'); });
+recipeInputBox.addEventListener('dragleave', () => recipeInputBox.classList.remove('drag-over'));
+recipeInputBox.addEventListener('drop', e => {
+  e.preventDefault(); recipeInputBox.classList.remove('drag-over');
   const f = e.dataTransfer.files[0];
   if (f) {
     const dt = new DataTransfer(); dt.items.add(f);
@@ -151,28 +293,32 @@ chatInputBox.addEventListener('drop', e => {
   }
 });
 
-// ── Auto-grow textarea ─────────────────────────────────────────────────────
-mainInput.addEventListener('input', () => {
-  mainInput.style.height = 'auto';
-  mainInput.style.height = Math.min(mainInput.scrollHeight, 180) + 'px';
-});
+// ── Auto-grow textareas ───────────────────────────────────────────────────────
+function autoGrow(el, max) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, max) + 'px';
+}
+mainInput.addEventListener('input', () => autoGrow(mainInput, 180));
+botInput.addEventListener('input',  () => autoGrow(botInput,  120));
 
-// Enter to submit (Shift+Enter = newline)
+// Recipe input: Enter to submit, Shift+Enter = newline
 mainInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    handleSubmit();
-  }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(); }
 });
 
-// ── Input type detection ───────────────────────────────────────────────────
+// Bot input: Enter to send, Shift+Enter = newline
+botInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); }
+});
+
+// ── Input type detection ──────────────────────────────────────────────────────
 function detectType(value, hasFile) {
   if (hasFile) return 'file';
   if (/^https?:\/\//i.test(value.trim())) return 'url';
   return 'text';
 }
 
-// ── Submit ─────────────────────────────────────────────────────────────────
+// ── Recipe submit ─────────────────────────────────────────────────────────────
 submitBtn.addEventListener('click', handleSubmit);
 
 async function handleSubmit() {
@@ -187,9 +333,9 @@ async function handleSubmit() {
 
   const type     = detectType(value, hasFile);
   const formData = new FormData();
-  if (type === 'file')      formData.append('file', currentFile);
-  else if (type === 'url')  formData.append('url', value);
-  else                       formData.append('text', value);
+  if (type === 'file')     formData.append('file', currentFile);
+  else if (type === 'url') formData.append('url', value);
+  else                     formData.append('text', value);
 
   setState('loading');
   startSteps();
@@ -206,15 +352,36 @@ async function handleSubmit() {
     }
 
     const { recipe, predictions, confidence, dish_info } = data;
+
+    // Store current state
+    currentRecipe      = recipe;
+    currentPredictions = predictions;
+    currentConfidence  = confidence;
+    currentDishInfo    = dish_info;
+    chatHistory        = [];
+
+    // Render results
     buildDishInfo(dish_info, recipe.recipe_name);
-    buildIngredientSidebar(recipe.ingredients);
+    buildIngredientFractions(recipe.ingredients);
     buildRecipeTable(recipe);
     buildScoresTable(predictions, confidence);
     buildRadar(predictions, confidence);
     renderConfidence(recipe.ingredients);
     document.getElementById('recipeName').textContent = recipe.recipe_name;
 
+    // Add assistant welcome message in chat
+    const summary = `I've analysed **${recipe.recipe_name}** — ${recipe.ingredients.length} ingredients found. You can ask me to change proportions, add or remove ingredients, or explain the predictions.`;
+    _appendBubble('assistant', summary);
+    chatHistory.push({ role: 'assistant', text: summary });
+
+    saveSession();
     setState('results');
+
+    // Clear recipe input
+    mainInput.value = '';
+    mainInput.style.height = '';
+    hideFileChip();
+
   } catch (err) {
     stopSteps();
     setState('initial');
@@ -222,14 +389,99 @@ async function handleSubmit() {
   }
 }
 
-// ── Confidence computation ─────────────────────────────────────────────────
+// ── Chat message handling ─────────────────────────────────────────────────────
+chatSendBtn.addEventListener('click', sendChatMessage);
+
+async function sendChatMessage() {
+  const text = botInput.value.trim();
+  if (!text || botInput.disabled) return;
+
+  botInput.value = '';
+  botInput.style.height = '';
+
+  _appendBubble('user', text);
+  chatHistory.push({ role: 'user', text });
+
+  // Typing indicator
+  const typing = document.createElement('div');
+  typing.className = 'chat-bubble assistant typing';
+  typing.innerHTML = '<span class="typing-dots"><span></span><span></span><span></span></span>';
+  chatMessages.appendChild(typing);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+
+  chatSendBtn.disabled = true;
+  botInput.disabled    = true;
+
+  try {
+    const res  = await fetch('/chat', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        session_id:   sessionId,
+        message:      text,
+        recipe:       currentRecipe,
+        chat_history: chatHistory.slice(0, -1), // exclude the message we just pushed
+      }),
+    });
+    const data = await res.json();
+    typing.remove();
+
+    if (data.error) {
+      _appendBubble('assistant', `Sorry, something went wrong: ${data.error}`);
+      return;
+    }
+
+    _appendBubble('assistant', data.reply);
+    chatHistory.push({ role: 'assistant', text: data.reply });
+
+    if (data.action === 'modify_recipe' && data.recipe) {
+      currentRecipe      = data.recipe;
+      currentPredictions = data.predictions;
+      currentConfidence  = data.confidence;
+
+      buildDishInfo(currentDishInfo, currentRecipe.recipe_name);
+      buildIngredientFractions(currentRecipe.ingredients);
+      buildRecipeTable(currentRecipe);
+      buildScoresTable(currentPredictions, currentConfidence);
+      buildRadar(currentPredictions, currentConfidence);
+      renderConfidence(currentRecipe.ingredients);
+    }
+
+    saveSession();
+  } catch (err) {
+    typing.remove();
+    _appendBubble('assistant', `Network error: ${err.message}`);
+  } finally {
+    chatSendBtn.disabled = false;
+    botInput.disabled    = false;
+    botInput.focus();
+  }
+}
+
+// ── Chat bubble renderer ──────────────────────────────────────────────────────
+function _appendBubble(role, text) {
+  // Remove welcome card on first real message
+  const welcome = document.getElementById('chatWelcome');
+  if (welcome) welcome.remove();
+
+  const div = document.createElement('div');
+  div.className = `chat-bubble ${role}`;
+  // Render **bold** markdown
+  div.innerHTML = text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// ── Confidence computation ────────────────────────────────────────────────────
 function computeConfidence(ingredients) {
   const map = { High: 0.88, Medium: 0.55, Low: 0.25 };
   let wSum = 0, wConf = 0;
   ingredients.forEach(ing => {
     const w = ing.weight || 0;
-    wSum   += w;
-    wConf  += w * (ing.source === 'database' ? 1.0 : (map[ing.confidence] || 0.25));
+    wSum  += w;
+    wConf += w * (ing.source === 'database' ? 1.0 : (map[ing.confidence] || 0.25));
   });
   return wSum > 0 ? Math.round((wConf / wSum) * 100) : 0;
 }
@@ -237,7 +489,6 @@ function computeConfidence(ingredients) {
 function renderConfidence(ingredients) {
   const pct = computeConfidence(ingredients);
   document.getElementById('confidencePct').textContent = `${pct}%`;
-  // Animate bar after paint
   requestAnimationFrame(() => {
     setTimeout(() => {
       document.getElementById('confidenceBar').style.width = `${pct}%`;
@@ -245,7 +496,7 @@ function renderConfidence(ingredients) {
   });
 }
 
-// ── Dish info (summary panel) ──────────────────────────────────────────────
+// ── Dish info (top card) ──────────────────────────────────────────────────────
 function buildDishInfo(dish_info, recipe_name) {
   document.getElementById('dishName').textContent        = recipe_name;
   document.getElementById('dishDescription').textContent = dish_info?.description ?? '';
@@ -253,31 +504,34 @@ function buildDishInfo(dish_info, recipe_name) {
   const wrap = document.getElementById('dishImageWrap');
   if (dish_info?.image_url) {
     const img = document.createElement('img');
-    img.src = dish_info.image_url;
-    img.alt = recipe_name;
-    img.onerror = () => {
+    img.src       = dish_info.image_url;
+    img.alt       = recipe_name;
+    img.className = 'dish-image-thumb';
+    img.onerror   = () => {
       wrap.innerHTML = `<div class="dish-placeholder"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>Image unavailable</span></div>`;
     };
     wrap.innerHTML = '';
     wrap.appendChild(img);
+  } else {
+    wrap.innerHTML = `<div class="dish-placeholder"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg><span>No image found</span></div>`;
   }
 }
 
-// ── Compact ingredient sidebar ─────────────────────────────────────────────
-function buildIngredientSidebar(ingredients) {
-  const list = document.getElementById('ingredientList');
-  if (!list) return;
+// ── Ingredient fraction list (top card) ───────────────────────────────────────
+function buildIngredientFractions(ingredients) {
+  const list = document.getElementById('ingredientFractionList');
   list.innerHTML = ingredients.map(ing => {
-    const p = Math.min(ing.weight * 100, 100);
-    return `<div class="ing-row">
-      <span class="ing-name">${ing.name}</span>
-      <div class="ing-bar-wrap"><div class="ing-bar" style="width:${p}%"></div></div>
-      <span class="ing-pct">${(ing.weight * 100).toFixed(1)}%</span>
+    const pct = (ing.weight * 100).toFixed(1);
+    const dot = ing.source === 'database' ? '#059669' : '#6B7280';
+    return `<div class="fraction-item">
+      <span class="fraction-dot" style="background:${dot}"></span>
+      <span class="fraction-name">${ing.name}</span>
+      <span class="fraction-pct">${pct}%</span>
     </div>`;
   }).join('');
 }
 
-// ── Ingredient detail table ────────────────────────────────────────────────
+// ── Ingredient detail table ───────────────────────────────────────────────────
 function _sourceBadge(source, confidence) {
   if (source === 'database') return { label: 'Database', cls: 'badge-database' };
   if (source === 'predicted') {
@@ -319,18 +573,16 @@ function buildRecipeTable(recipe) {
 
     const tdEv = document.createElement('td');
     if (src === 'predicted' && ing.evidence) {
-      const ev = ing.evidence;
+      const ev    = ing.evidence;
       const short = ev.length > 55 ? ev.slice(0, 55) + '…' : ev;
-      // Linkify any URLs in the evidence
       const linked = ev.replace(/(https?:\/\/[^\s,;)"']+)/g,
         '<a href="$1" target="_blank" rel="noopener" class="evidence-link" onclick="event.stopPropagation()">↗</a>');
       const btn = document.createElement('span');
       btn.className = 'evidence-text';
-      btn.title = 'Click to expand';
+      btn.title     = 'Click to expand';
       btn.innerHTML = short;
       btn.addEventListener('click', () => showEvidenceModal(ev, linked));
       tdEv.appendChild(btn);
-      // Append link icons inline if URLs present
       const urls = ev.match(/(https?:\/\/[^\s,;)"']+)/g) || [];
       urls.forEach(url => {
         const a = document.createElement('a');
@@ -354,7 +606,7 @@ function buildRecipeTable(recipe) {
   });
 }
 
-// ── Scores table ───────────────────────────────────────────────────────────
+// ── Scores table ──────────────────────────────────────────────────────────────
 function buildScoresTable(predictions, confidence) {
   const c = document.getElementById('scoresContainer');
   c.innerHTML = '';
@@ -376,12 +628,9 @@ function buildScoresTable(predictions, confidence) {
   });
 }
 
-// ── Evidence modal ─────────────────────────────────────────────────────────
+// ── Evidence modal ────────────────────────────────────────────────────────────
 function _parseCitations(text) {
-  const seen = new Set();
-  const out   = [];
-
-  // Bare DOIs like "DOI: 10.xxxx/..." or "doi:10.xxxx/..."
+  const seen = new Set(), out = [];
   const doiRe = /\bDOI:?\s*(10\.\d{4,}\/\S+)/gi;
   let m;
   while ((m = doiRe.exec(text)) !== null) {
@@ -389,14 +638,11 @@ function _parseCitations(text) {
     const href = `https://doi.org/${doi}`;
     if (!seen.has(doi)) { seen.add(doi); out.push({ href, label: doi }); }
   }
-
-  // Full URLs (https://...)
   const urlRe = /https?:\/\/[^\s,;)"'\]]+/g;
   while ((m = urlRe.exec(text)) !== null) {
     const href = m[0].replace(/[.,;)"']+$/, '');
     if (!seen.has(href)) { seen.add(href); out.push({ href, label: href }); }
   }
-
   return out;
 }
 
@@ -411,25 +657,18 @@ function showEvidenceModal(text, linkedHtml) {
     modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
     document.getElementById('evClose').addEventListener('click', () => { modal.style.display = 'none'; });
   }
-
   const citations = _parseCitations(text);
   let html = `<div class="ev-main-text">${linkedHtml}</div>`;
   if (citations.length > 0) {
-    html += `<div class="ev-citations">
-      <div class="ev-citations-label">Sources</div>
-      ${citations.map((c, i) => `
-        <div class="ev-citation">
-          <span class="ev-cit-num">${i + 1}</span>
-          <a href="${c.href}" target="_blank" rel="noopener" class="ev-cit-link">${c.label}</a>
-        </div>`).join('')}
+    html += `<div class="ev-citations"><div class="ev-citations-label">Sources</div>
+      ${citations.map((c, i) => `<div class="ev-citation"><span class="ev-cit-num">${i+1}</span><a href="${c.href}" target="_blank" rel="noopener" class="ev-cit-link">${c.label}</a></div>`).join('')}
     </div>`;
   }
-
   document.getElementById('evBody').innerHTML = html;
   modal.style.display = 'flex';
 }
 
-// ── Radar scroll zoom ──────────────────────────────────────────────────────
+// ── Radar scroll zoom ─────────────────────────────────────────────────────────
 let radarMaxScale = 100;
 
 document.getElementById('radarCanvas').addEventListener('wheel', e => {
@@ -440,7 +679,7 @@ document.getElementById('radarCanvas').addEventListener('wheel', e => {
   radarChart.update('none');
 }, { passive: false });
 
-// ── Radar chart ────────────────────────────────────────────────────────────
+// ── Radar chart ───────────────────────────────────────────────────────────────
 function buildRadar(predictions, confidence) {
   radarMaxScale = 100;
   const ctx = document.getElementById('radarCanvas').getContext('2d');
@@ -492,3 +731,6 @@ function buildRadar(predictions, confidence) {
     },
   });
 }
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+initSession();
