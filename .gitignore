@@ -13,3 +13,6 @@ __pycache__/
 
 # Generated outputs (regenerable by running scripts)
 Lasso/data/processed/
+
+# Claude Code instructions (local only)
+CLAUDE.md

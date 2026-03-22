@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 load_dotenv()
 import os
 import pickle
-import subprocess
 import sys
 import tempfile
 
@@ -19,13 +18,15 @@ import pandas as pd
 from flask import Flask, jsonify, render_template, request
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-REPO_ROOT    = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-LASSO_SRC    = os.path.join(REPO_ROOT, "Lasso", "src")
-PROC_DIR     = os.path.join(REPO_ROOT, "Lasso", "data", "processed")
-MODELS_PATH  = os.path.join(REPO_ROOT, "results", "models", "final_models.pkl")
+WEBAPP_DIR   = os.path.dirname(os.path.abspath(__file__))
+REPO_ROOT    = os.path.abspath(os.path.join(WEBAPP_DIR, ".."))
+MODELS_DIR   = os.path.join(REPO_ROOT, "results", "models")
+MODELS_PATH  = os.path.join(MODELS_DIR, "final_models.pkl")
 METRICS_PATH = os.path.join(REPO_ROOT, "results", "metrics", "lasso_metrics.csv")
 EXCEL_PATH   = os.path.join(REPO_ROOT, "data", "Supplementary_Data_File_1_v11.xlsx")
 EXCEL_SHEET  = "foods"
+SCALER_MEAN  = os.path.join(MODELS_DIR, "x_scaler_mean.npy")
+SCALER_SCALE = os.path.join(MODELS_DIR, "x_scaler_scale.npy")
 
 # Excel column → internal key mapping
 COL_NAME    = "Food Name (EN)"
@@ -38,35 +39,24 @@ COL_PRED    = "predicted"
 COL_CONF    = "confidence"
 COL_EVID    = "evidence"
 
-# Canonical sensory order – must match preprocess.py SENSORY_KEYS and plot_config.py SENSORY_ORDER
+# Canonical sensory order
 FEATURE_KEYS  = ["sweet", "bitter", "salty", "umami", "sour"]
 SENSORY_ORDER = ["sweet", "bitter", "salty", "umami", "sour"]
 
 # Make lasso.py importable (required to unpickle final_models.pkl)
-sys.path.insert(0, LASSO_SRC)
+sys.path.insert(0, WEBAPP_DIR)
 
 app = Flask(__name__)
 
 
 # ── Model loading ─────────────────────────────────────────────────────────────
 
-def _retrain() -> None:
-    """Run preprocess.py then train.py to produce models."""
-    env = os.environ.copy()
-    env["PYTHONPATH"] = LASSO_SRC + os.pathsep + env.get("PYTHONPATH", "")
-    for script in ("preprocess.py", "train.py"):
-        subprocess.run(
-            [sys.executable, os.path.join(LASSO_SRC, script)],
-            cwd=LASSO_SRC,
-            env=env,
-            check=True,
-        )
-
-
 def load_models() -> dict:
     if not os.path.exists(MODELS_PATH):
-        print("[webapp] Models not found – retraining…")
-        _retrain()
+        raise FileNotFoundError(
+            f"Model file not found: {MODELS_PATH}\n"
+            "Run the training pipeline on the main branch to generate models."
+        )
     with open(MODELS_PATH, "rb") as fh:
         return pickle.load(fh)
 
@@ -156,9 +146,14 @@ def _match_to_database(ingredient_names: list[str]) -> dict:
         "Return ONLY a JSON object mapping each ingredient name to the best matching "
         "database entry name, or null if there is no reasonable match.\n\n"
         "Rules:\n"
-        "- Same ingredient = match (e.g. 'apple' → 'Apple, raw with skin')\n"
-        "- Clearly different ingredient = null (e.g. 'salt' vs 'MSG' = null)\n"
-        "- Favour specificity: 'whole milk' → closest milk variant in the list\n\n"
+        "- Match ONLY to the ingredient in its pure/standalone form (e.g. 'apple' → 'Apple, raw with skin').\n"
+        "- Return null if the best database entry is the ingredient combined with or served alongside "
+        "another food (e.g. 'granulated sugar' must NOT match 'Sugar granulated, with coffee' or "
+        "'Sugar granulated, with tea' — those entries reflect a coffee/tea context, not pure sugar).\n"
+        "- Return null if the ingredient and database entry are clearly different foods "
+        "(e.g. 'salt' vs 'MSG' = null; 'flour' vs 'Crisps based on potato flour' = null).\n"
+        "- Favour the most specific *pure-ingredient* match: 'whole milk' → closest plain milk variant.\n"
+        "- When in doubt, return null — it is better to research the ingredient than to use a wrong match.\n\n"
         f"Ingredients to match:\n{json.dumps(ingredient_names)}\n\n"
         f"Available database entries:\n{db_list_str}\n\n"
         f'Return ONLY valid JSON like: {{"apple": "Apple, raw with skin", "unicorn dust": null}}'
@@ -375,36 +370,18 @@ def _compute_feature_vector(ingredients: list) -> np.ndarray:
     return vec
 
 
-def _build_scaler_from_training_data() -> tuple[np.ndarray, np.ndarray]:
-    """
-    Recompute the raw-feature scaler from training recipes.
-
-    train.py overwrites the scaler files saved by preprocess.py with a
-    second near-identity standardisation, so we cannot trust those files.
-    We re-derive the original mean/std by replaying preprocess.py's logic
-    on the raw_recipes data.
-    """
-    import importlib.util
-    raw_path = os.path.join(REPO_ROOT, "data", "raw_recipes.py")
-    spec = importlib.util.spec_from_file_location("raw_recipes_module", raw_path)
-    mod  = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    recipes = mod.raw_recipes
-
-    rows = []
-    for r in recipes:
-        ings = _normalize_weights(r["ingredients"])
-        rows.append(_compute_feature_vector(ings))
-    X_raw = np.vstack(rows)
-
-    mean  = X_raw.mean(axis=0)
-    std   = X_raw.std(axis=0)
-    scale = np.where(std == 0, 1.0, std)
-    return mean, scale
+def _load_scaler() -> tuple[np.ndarray, np.ndarray]:
+    """Load pre-computed feature scaler from results/models/."""
+    if not os.path.exists(SCALER_MEAN) or not os.path.exists(SCALER_SCALE):
+        raise FileNotFoundError(
+            f"Scaler files not found in {MODELS_DIR}.\n"
+            "Run the training pipeline on the main branch to generate them."
+        )
+    return np.load(SCALER_MEAN), np.load(SCALER_SCALE)
 
 
-# Compute scaler once at module load
-_scaler_mean, _scaler_scale = _build_scaler_from_training_data()
+# Load scaler once at startup
+_scaler_mean, _scaler_scale = _load_scaler()
 
 
 def _standardize(vec: np.ndarray) -> np.ndarray:

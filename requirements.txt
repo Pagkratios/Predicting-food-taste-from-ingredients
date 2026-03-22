@@ -1,15 +1,9 @@
-# Universal requirements for the entire repo (Lasso pipeline + webapp)
+# Webapp dependencies
 
-# Core scientific stack (pinned for reproducibility)
+# Core
 numpy==1.26.4
 pandas==2.3.3
 scikit-learn==1.7.2
-matplotlib==3.10.8
-scipy==1.15.3
-seaborn==0.13.2
-numexpr==2.14.1
-bottleneck==1.6.0
-tabulate==0.10.0
 
 # Web app
 flask>=3.0.0

@@ -253,7 +253,7 @@ body.state-loading .center-view  { justify-content: flex-start; padding-top: 88p
 ═══════════════════════════════════════════════════════════════════════════ */
 .results-layout {
   display: none; /* JS sets to grid when showing */
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 336px 1fr;
   min-height: calc(100vh - var(--app-bar-h));
   margin-top: var(--app-bar-h);
 }
@@ -528,6 +528,12 @@ kbd {
 .ev-modal-close:hover { color: var(--text); }
 .ev-modal-body { margin-top: 8px; }
 .ev-modal-body a { color: var(--accent); text-decoration: underline; }
+.ev-main-text { margin-bottom: 16px; }
+.ev-citations { border-top: 1px solid var(--border); padding-top: 12px; margin-top: 4px; }
+.ev-citations-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px; }
+.ev-citation { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.ev-cit-num { font-size: 10px; font-weight: 700; color: var(--text-dim); min-width: 14px; }
+.ev-cit-link { font-size: 12px; color: var(--accent); text-decoration: underline; word-break: break-all; }
 
 /* ── Responsive ──────────────────────────────────────────────────────────── */
 @media (max-width: 820px) {

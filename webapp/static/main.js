@@ -266,11 +266,12 @@ function buildDishInfo(dish_info, recipe_name) {
 // ── Compact ingredient sidebar ─────────────────────────────────────────────
 function buildIngredientSidebar(ingredients) {
   const list = document.getElementById('ingredientList');
+  if (!list) return;
   list.innerHTML = ingredients.map(ing => {
-    const pct = Math.min(ing.weight * 100, 100);
+    const p = Math.min(ing.weight * 100, 100);
     return `<div class="ing-row">
       <span class="ing-name">${ing.name}</span>
-      <div class="ing-bar-wrap"><div class="ing-bar" style="width:${pct}%"></div></div>
+      <div class="ing-bar-wrap"><div class="ing-bar" style="width:${p}%"></div></div>
       <span class="ing-pct">${(ing.weight * 100).toFixed(1)}%</span>
     </div>`;
   }).join('');
@@ -376,6 +377,29 @@ function buildScoresTable(predictions, confidence) {
 }
 
 // ── Evidence modal ─────────────────────────────────────────────────────────
+function _parseCitations(text) {
+  const seen = new Set();
+  const out   = [];
+
+  // Bare DOIs like "DOI: 10.xxxx/..." or "doi:10.xxxx/..."
+  const doiRe = /\bDOI:?\s*(10\.\d{4,}\/\S+)/gi;
+  let m;
+  while ((m = doiRe.exec(text)) !== null) {
+    const doi  = m[1].replace(/[.,;)"']+$/, '');
+    const href = `https://doi.org/${doi}`;
+    if (!seen.has(doi)) { seen.add(doi); out.push({ href, label: doi }); }
+  }
+
+  // Full URLs (https://...)
+  const urlRe = /https?:\/\/[^\s,;)"'\]]+/g;
+  while ((m = urlRe.exec(text)) !== null) {
+    const href = m[0].replace(/[.,;)"']+$/, '');
+    if (!seen.has(href)) { seen.add(href); out.push({ href, label: href }); }
+  }
+
+  return out;
+}
+
 function showEvidenceModal(text, linkedHtml) {
   let modal = document.getElementById('evidenceModal');
   if (!modal) {
@@ -387,12 +411,38 @@ function showEvidenceModal(text, linkedHtml) {
     modal.addEventListener('click', e => { if (e.target === modal) modal.style.display = 'none'; });
     document.getElementById('evClose').addEventListener('click', () => { modal.style.display = 'none'; });
   }
-  document.getElementById('evBody').innerHTML = linkedHtml;
+
+  const citations = _parseCitations(text);
+  let html = `<div class="ev-main-text">${linkedHtml}</div>`;
+  if (citations.length > 0) {
+    html += `<div class="ev-citations">
+      <div class="ev-citations-label">Sources</div>
+      ${citations.map((c, i) => `
+        <div class="ev-citation">
+          <span class="ev-cit-num">${i + 1}</span>
+          <a href="${c.href}" target="_blank" rel="noopener" class="ev-cit-link">${c.label}</a>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('evBody').innerHTML = html;
   modal.style.display = 'flex';
 }
 
+// ── Radar scroll zoom ──────────────────────────────────────────────────────
+let radarMaxScale = 100;
+
+document.getElementById('radarCanvas').addEventListener('wheel', e => {
+  e.preventDefault();
+  if (!radarChart) return;
+  radarMaxScale = Math.min(100, Math.max(20, radarMaxScale + (e.deltaY > 0 ? 10 : -10)));
+  radarChart.options.scales.r.max = radarMaxScale;
+  radarChart.update('none');
+}, { passive: false });
+
 // ── Radar chart ────────────────────────────────────────────────────────────
 function buildRadar(predictions, confidence) {
+  radarMaxScale = 100;
   const ctx = document.getElementById('radarCanvas').getContext('2d');
   if (radarChart) radarChart.destroy();
   const data   = SENSES.map(s => predictions[s] ?? 0);
