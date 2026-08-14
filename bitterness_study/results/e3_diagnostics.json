@@ -1,0 +1,35 @@
+{
+  "variance_concentration": {
+    "top1_recipes_share_of_SST": 0.31039239730226853,
+    "top2_recipes_share_of_SST": 0.6207847946045371,
+    "top3_recipes_share_of_SST": 0.6650827713059472,
+    "top5_recipes_share_of_SST": 0.7021765787860207,
+    "top10_recipes_share_of_SST": 0.7884733292458614,
+    "SST": 133.14285714285717,
+    "n_above_modal": 23
+  },
+  "top2_share_by_taste": {
+    "sweet": 0.2110139697089496,
+    "sour": 0.28453516599993156,
+    "bitter": 0.6207847946045371,
+    "umami": 0.14007102149220227,
+    "salty": 0.10392316700082667
+  },
+  "quantisation": {
+    "panel_quantisation_step": 1.0,
+    "sd_of_response": 1.3891028130627334,
+    "constant_RMSE": 1.3991325665098169,
+    "best_model_RMSE": 1.2214450794497385,
+    "RMSE_gain": 0.17768748706007842,
+    "RMSE_gain_in_quantisation_steps": 0.17768748706007842,
+    "constant_MAE": 0.9233954451345756,
+    "best_model_MAE": 0.7142857142857143,
+    "MAE_gain": 0.2091097308488613,
+    "MAE_gain_in_quantisation_steps": 0.2091097308488613,
+    "RMSE_gain_as_pct_of_0_100_scale": 0.0017768748706007843,
+    "irreducible_RMSE_from_rounding": 0.2886751345948129,
+    "max_R2_if_only_rounding_noise": 0.9568133047210301,
+    "best_RMSE_model": "Ordinal (prop. odds)",
+    "best_MAE_model": "Constant (median)"
+  }
+}
