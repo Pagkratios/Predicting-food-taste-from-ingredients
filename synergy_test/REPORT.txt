@@ -1,0 +1,913 @@
+====================================================================================================
+DOES AN EXPLICIT UMAMI-SYNERGY INTERACTION TERM IMPROVE THE HYBRID MODEL?
+====================================================================================================
+
+
+Question under test. A reviewer objected that the hybrid model cannot represent nucleotide–glutamate
+synergy (IMP/GMP × free glutamate), which is multiplicative, because every current feature enters
+additively. This report tests empirically whether adding a single product feature phi_syn =
+f_nucleotide × f_glutamate fixes that.
+
+Verdict up front: it does not. Adding phi_syn makes umami LOOCV MAE worse by +0.064 points on the
+0–100 scale (5.746 → 5.810). Lasso zeroes the coefficient on the full-data fit and in 96% of LOOCV
+folds. Even an unregularised, in-sample, no-CV oracle fit — the most generous possible test — gains
+only 0.004 MAE points (partial F p = 0.66). The dataset contains 18/70 recipes in which both classes
+are co-present, and the smallest synergy effect this design could detect is an ~11-point umami
+shift. The correct conclusion is not "there is no synergy" but "this dataset cannot see it, and a
+product feature does not help." Full numbers in §6–§7; verdict and what would settle it in §8; what
+I could not do in §9.
+
+
+....................................................................................................
+
+
+====================================================================================================
+1. What was done, and every judgement call
+====================================================================================================
+
+
+1.1 Ground rules honoured
+-------------------------
+
+
+Nothing in the existing repo was modified. All work lives in synergy_test/. The only parent-repo
+files touched were reads, and each was copied into synergy_test/ before use:
+
+
+Copied into synergy_test/           Source in repo                 Purpose
+--------------------------------------------------------------------------
+data/raw_recipes.py                 data/raw_recipes.py            dataset (md5 verified identical: 8c3f1589a2f6b0363634383f2669837a)
+vendor/compute_bounds.py            HS_RV/src/compute_bounds.py    load_attr_from_py, normalize_weights
+vendor/env_config.py                HS_RV/src/env_config.py        import dependency of the above
+vendor/plot_config.py               Lasso/src/plot_config.py       figure styling (paper conventions)
+vendor/hybrid_analysis_ORIGINAL.py  Hybrid/src/hybrid_analysis.py  untouched reference copy of the model being tested
+
+
+1.2 Exact deviations from the original pipeline
+-----------------------------------------------
+
+
+The model code in core.py is copied from Hybrid/src/hybrid_analysis.py. Five deviations, all logged
+in core.DEVIATIONS:
+
+1. RAW_PATH points at the local byte-identical copy of the dataset, so the folder is self-contained. No
+   content change.
+2. metrics() additionally returns RMSE. The original returned (MAE, PCC, bias) only; RMSE was
+   requested. The MAE/PCC/bias formulas are untouched.
+3. loo_evaluate() additionally returns the per-fold coefficient matrix and the per-fold selected alpha,
+   so fold-wise non-zero rates can be reported. The fit itself is unchanged: StandardScaler fit on the
+   training fold only, then LassoCV(alphas=np.logspace(-3,1,30), cv=5, max_iter=20000).
+4. chemistry_features() gained optional class-list arguments used to append synergy features to the
+   returned dict. With empty lists the dict is identical to the original.
+5. kfold_evaluate() is new (Step 6 only). It is loo_evaluate with LeaveOneOut swapped for
+   KFold(n_splits=10, shuffle=True, random_state=seed); the standardisation and Lasso call are
+   identical.
+
+Verification that nothing drifted. The baseline reproduces the committed repo output to every
+printed digit:
+
+
+Taste   This report, Hybrid MAE  results/coverage/table1_coverage.csv (repo)
+----------------------------------------------------------------------------
+Sweet   7.629037                 7.629037057191675
+Sour    6.296015                 6.296014944340312
+Bitter  0.955596                 0.955596470327844
+Umami   5.746247                 5.7462470816882
+Salt    9.158487                 9.158487334295017
+
+
+LassoCV here is deterministic (fixed alpha grid, non-shuffled inner 5-fold), so LOOCV results are
+exactly reproducible; only the Step-6 k-fold and permutation runs involve randomness, and those
+seeds are fixed.
+
+
+1.3 Judgement calls (full list)
+-------------------------------
+
+
+#   Call                                                                                               Decision                                                                                                       Why
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+J1  Class membership by keyword regex (as the repo does) or by exact ingredient name?                  Exact name                                                                                                     The repo's own 8 features use regex, and those are left untouched. For the new classes, exact matching makes all 115 assignments individually auditable and avoids accidents (e.g. chicken in PROTEIN_PAT also matches "Chicken fillet raw" but a keyword cod would match "Cod boiled" and nothing else here — fine — while egg would sweep in things the spec does not intend).
+J2  How to define f_nucleotide / f_glutamate                                                           Sum of normalised mass fractions of class members, using the repo's normalize_weights()                        Matches how every existing chemistry feature is built (frac_match sums normalised weights).
+J3  Where to add the feature                                                                           As a 9th chemistry-proxy feature, i.e. features become [t_hs_mid, t_voigt] + 8 chem + phi_syn (11 total)       This is exactly the insertion point the reviewer's objection implies, and keeps everything else identical.
+J4  Which alpha to report as "selected"                                                                Both the full-data fit alpha (as the repo does for Table S3) and the median/min/max across the 70 LOOCV folds  LassoCV re-selects alpha inside every LOOCV fold, so there is no single selected alpha. Reporting only one would be misleading.
+J5  An ingredient that is arguably in both classes (Worcestershire: fermented and anchovy-containing)  Assigned to GLUTAMATE only                                                                                     If one ingredient were in both classes it would generate non-zero phi_syn by itself, which is not synergy between two components. The repo's own FERMENT_PAT already lists worcestershire.
+J6  Borderline glutamate items (fresh cheeses, yoghurt, capers, olives, sambal, jarred peanut sauce)   Excluded from the primary list, included in a broad list run as variant (h)                                    These are genuine coin-flips. Running both shows whether the verdict depends on them. It does not.
+J7  Co-presence threshold                                                                              f_nucleotide > 0 AND f_glutamate > 0                                                                           Any strictly positive mass of both is the weakest possible requirement, i.e. maximally generous to the hypothesis.
+J8  Residual sign convention                                                                           residual = actual − predicted (as requested)                                                                   Positive residual = model under-predicts, which is the direction synergy would produce.
+J9  Bitterness included in the per-dimension rerun                                                     Yes, reported, but it is a floor-effect dimension (mean 1.57, PCC ≈ 0)                                         The repo excludes bitter from its 4-D averages; its numbers here are reported but not interpretable.
+
+
+1.4 A note on the dataset size claim
+------------------------------------
+
+
+The manuscript abstract says "70 recipes decomposed into 209 ingredient-level taste references". The
+dataset at data/raw_recipes.py has 70 recipes, 115 unique ingredient names, and 510 ingredient
+instances across recipes. 115 matches the manuscript's later statement ("115 per-ingredient
+features") and matches the repo's Lasso per-ingr model. I could not reproduce 209 from this file
+under any counting rule I tried (unique names = 115, instances = 510, unique name × taste pairs =
+575). The task brief also said 209. I used the 115 actual unique ingredients; the full list with
+per-recipe mass fractions is in results/ingredient_inventory.csv and
+results/recipe_ingredient_mass_fractions.csv. This discrepancy is flagged, not resolved — see §7.
+
+
+....................................................................................................
+
+
+====================================================================================================
+2. Step 0 — Orientation: where everything lives
+====================================================================================================
+
+
+2.1 The 8 chemistry-proxy features
+----------------------------------
+
+
+Constructed in Hybrid/src/hybrid_analysis.py:
+
+- Regex class patterns: lines 33–38
+- frac_match() (sums normalised mass fractions of regex-matching ingredients): lines 42–47
+- chemistry_features(): lines 49–71
+
+
+Feature             Definition
+------------------------------
+protein_frac        mass frac matching `(?i)chicken    pork    beef     cod            ham         egg             milk           cheese  yoghurt  whey`
+sugar_frac          mass frac matching `(?i)sugar      honey   syrup    jam            raisin`
+maillard_potential  protein_frac × sugar_frac
+salt_frac           mass frac matching (?i)^salt$
+water_frac          mass frac matching (?i)^water
+conc_factor         1 / (1 − min(water_frac, 0.9))
+allium_frac         mass frac matching `(?i)onion      garlic  leek     spring onion`
+fermented_frac      mass frac matching `(?i)soy sauce  cheese  vinegar  mustard        sauerkraut  worcestershire  tomato puree`
+
+
+Note for the reviewer response: maillard_potential is already a product of two mass fractions. The
+model architecture therefore already admits multiplicative features; the objection is really that
+this particular product was absent, not that products are impossible. That is a materially weaker
+objection.
+
+
+2.2 The Lasso + LOOCV loop, and alpha selection
+-----------------------------------------------
+
+
+loo_evaluate(), lines 137–148 of hybrid_analysis.py:
+
+    loo = LeaveOneOut()                         # 70 folds
+    for tri, tei in loo.split(X):
+        sc = StandardScaler()
+        Xtr = sc.fit_transform(X[tri])          # standardisation fit on TRAIN fold only
+        Xte = sc.transform(X[tei])
+        m = LassoCV(alphas=alphas, cv=5, max_iter=20000)   # alphas = np.logspace(-3,1,30)
+        m.fit(Xtr, y[tri])
+        preds[tei] = m.predict(Xte)
+
+Alpha is not fixed. LassoCV performs an inner 5-fold CV over a 30-point log grid 10^-3 … 10^1 inside
+each of the 70 outer LOOCV folds, so alpha is re-selected 70 times. The single alpha printed in the
+repo's Table S3 (hybrid_analysis.py lines 292–307) comes from a separate full-data fit used only for
+reporting coefficients, not for the CV metrics.
+
+The hybrid feature set is assembled at line 196: [f'{t}_hs_mid', f'{t}_voigt'] + chem_cols → 10
+features per taste.
+
+
+2.3 The ingredient list and per-recipe mass fractions
+-----------------------------------------------------
+
+
+Built in build_analysis_df(), lines 86–132. Weights are normalised per recipe by normalize_weights()
+(HS_RV/src/compute_bounds.py lines 77–89): clip negatives to 0, nan_to_num, divide by the sum. All
+115 ingredients and all 70×115 mass fractions are exported here:
+
+- results/ingredient_inventory.csv — all 115 names, how many recipes use each, and min/mean/max mass
+  fraction when used, plus class-membership flags.
+- results/recipe_ingredient_mass_fractions.csv — the full 70 × 115 matrix.
+
+
+2.4 How the existing keyword categories are defined
+---------------------------------------------------
+
+
+They are regex substring matches on the raw ingredient-name string, case-insensitive, with no
+vocabulary or ontology behind them (hybrid_analysis.py lines 33–38, applied by frac_match, lines
+42–47). Consequences worth knowing:
+
+- allium and fermented overlap heavily with each other and with protein: every cheese is both
+  protein_frac and fermented_frac; "Spices/onion" counts as allium.
+- ^salt$ is anchored, so "Peanuts salted" does not count as salt.
+- ^water matches "Water" and also "Water chestnut" — a false positive that inflates water_frac (and
+  hence conc_factor) for any recipe containing water chestnut. I did not fix this; it is pre-existing
+  repo behaviour and fixing it would change the baseline I am comparing against. Flagged in §9.
+
+
+....................................................................................................
+
+
+====================================================================================================
+3. Step 1 — The two ingredient classes, in full
+====================================================================================================
+
+
+f_nucleotide and f_glutamate are the summed normalised mass fractions of the members below.
+Definitions live in synergy_test/ingredient_classes.py; the machine-readable version is
+results/ingredient_classes.csv.
+
+
+3.1 NUCLEOTIDE (IMP/GMP sources) — 8 ingredients
+------------------------------------------------
+
+
+    Chicken fillet raw
+    Cod boiled
+    Ham lean boiled
+    Minced beef raw
+    Minced beef/pork raw
+    Pork fillet raw
+    Pork fillet raw (69%) + Beef (31%)
+    Yeast
+
+Spec categories with no representative in this dataset: shellfish, anchovy (as such), mushroom,
+yeast extract, bouillon/stock cubes, fish sauce. Only one fish item exists (Cod boiled) and it
+appears in a single recipe.
+
+
+3.2 GLUTAMATE (free Glu sources) — 17 ingredients (primary list)
+----------------------------------------------------------------
+
+
+    # tomato and tomato products
+    Tomato average raw
+    Tomato puree/concentrate
+    # aged / hard cheese
+    Cheese 20+
+    Cheese Gouda 48+ average
+    # soy sauce
+    Soy sauce Kikkoman
+    # vinegar, mustard
+    Vinegar
+    Mustard
+    # other fermented
+    Sauerkraut (zuurkool)
+    Spices/Worcestershire
+    # alliums
+    Onions raw
+    Garlic
+    Leek boiled
+    Spring onion
+    Spices/onion
+    Herbs (parsley/garlic)
+    # peas
+    Peas frozen boiled
+    Peas garden super fine tinned
+
+Spec categories with no representative: fish sauce, seaweed, corn.
+
+
+3.3 GLUTAMATE "broad" sensitivity list — the 17 above plus these 7
+------------------------------------------------------------------
+
+
+    Cheese Mozzarella
+    Cheese cream soft Mon Chou
+    Yoghurt full fat
+    Capers
+    Olives tinned/glass
+    Spices/sambal
+    Peanut sauce jar prepared
+
+Used only for variant (h). It changes nothing (§6).
+
+
+3.4 Every ingredient I was unsure about, and which way I assigned it
+--------------------------------------------------------------------
+
+
+Ingredient                                                                                                                    Class considered  Assigned                         Reason
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Beef gelatin                                                                                                                  NUCLEOTIDE        excluded                         Hydrolysed collagen; processing removes essentially all nucleotides. Meat-derived but not an IMP source.
+Eggs chicken boiled average                                                                                                   NUCLEOTIDE        excluded                         Egg is animal protein but not a recognised IMP/GMP source; spec lists flesh/fish/mushroom/yeast.
+Leavening/sugar                                                                                                               NUCLEOTIDE        excluded                         Ambiguous label; read as chemical leavening. Baker's yeast in baked goods is also spent.
+Toast, Baguette white, Flour*                                                                                                 NUCLEOTIDE        excluded                         Yeast-leavened but the yeast is spent and at trace mass. Including bread would make f_nucleotide > 0 in nearly every recipe and destroy the contrast entirely.
+Whey                                                                                                                          NUCLEOTIDE        excluded                         Dairy protein fraction.
+Cheese 20+                                                                                                                    GLUTAMATE         included                         Dutch "20+" = fat-in-dry-matter of a ripened Gouda-type cheese, i.e. aged/hard.
+Cheese Mozzarella                                                                                                             GLUTAMATE         excluded from primary, in broad  Fresh pasta-filata; free Glu roughly an order of magnitude below aged Gouda. Spec says "aged/hard cheese".
+Cheese cream soft Mon Chou                                                                                                    GLUTAMATE         excluded from primary, in broad  Fresh unripened cream cheese.
+Yoghurt full fat                                                                                                              GLUTAMATE         excluded from primary, in broad  Fermented, but lactic fermentation yields little free Glu vs proteolytic ripening.
+Spices/Worcestershire                                                                                                         BOTH              GLUTAMATE only                   Genuinely dual: fermented condiment that also contains anchovy. Assigned to one class only so a single ingredient cannot generate phi_syn by itself. Repo's FERMENT_PAT already lists it. This is the single assignment most open to challenge.
+Spices/onion, Herbs (parsley/garlic)                                                                                          GLUTAMATE         included                         Composite labels whose stated composition contains an allium; matches the repo's own ALLIUM_PAT behaviour.
+Capers, Olives tinned/glass                                                                                                   GLUTAMATE         excluded from primary, in broad  Brine-cured; some lactic fermentation but not conventionally cited as free-Glu sources, and present at tiny mass fractions.
+Spices/sambal                                                                                                                 GLUTAMATE         excluded from primary, in broad  Some sambals are fermented, most commercial ones are not; label gives no composition.
+Peanut sauce jar prepared                                                                                                     GLUTAMATE         excluded from primary, in broad  Commercial satay sauce commonly contains soy sauce, onion, often added MSG — but the label gives no composition, so it is a guess either way.
+Beans brown tinned, Broccoli boiled, Kale curly boiled, White cabbage (raw), Water chestnut, Carrots (boiled/tinned), Celery  GLUTAMATE         excluded                         Not named in the spec's glutamate list. Some vegetables (e.g. Chinese cabbage) do carry free Glu, but including arbitrary vegetables would make the class unfalsifiable.
+
+
+....................................................................................................
+
+
+====================================================================================================
+4. Step 2 — Coverage: is the interaction identifiable at all?
+====================================================================================================
+
+
+results/step2_class_fraction_distributions.csv, results/step2_copresent_recipes.csv,
+results/step2_all_recipes.csv. Figure: figures/fig1_class_coverage.png.
+
+
+4.1 Co-presence count
+---------------------
+
+
+                          recipes  share of 70
+----------------------------------------------
+≥1 NUCLEOTIDE ingredient  25       36%
+≥1 GLUTAMATE ingredient   42       60%
+both (phi_syn > 0)        18       26%
+phi_syn = 0               52       74%
+
+
+Say it plainly: 18. Fifty-two of the seventy recipes have phi_syn identically zero and carry no
+information about the interaction whatsoever. The effective sample for estimating this coefficient
+is 18, and the top 3 recipes carry 44% of the total phi_syn mass in the dataset. This is the central
+fact of the whole exercise.
+
+
+4.2 Distribution of the two class mass fractions
+------------------------------------------------
+
+
+variable      n   n>0  mean    SD      min  p25  median  p75     max
+--------------------------------------------------------------------
+f_nucleotide  70  25   0.1053  0.2186  0    0    0.0000  0.0859  0.9000
+f_glutamate   70  42   0.1077  0.1799  0    0    0.0505  0.1000  0.8600
+phi_syn       70  18   0.0056  0.0139  0    0    0.0000  0.0011  0.0650
+
+
+Both marginals are zero-inflated and right-skewed; their product is far more so. The largest phi_syn
+in the entire dataset is 0.065.
+
+
+4.3 The 18 co-present recipes
+-----------------------------
+
+
+Sorted by phi_syn. Residual = actual − baseline hybrid LOOCV prediction; a positive residual means
+the current model under-predicts umami, which is what synergy would cause.
+
+
+RP    recipe                                       f_nuc  f_glu  phi_syn  umami actual  hybrid pred  residual
+-------------------------------------------------------------------------------------------------------------
+RP27  Chicken cordon bleu (pan-fried)              0.650  0.100  0.0650   28            25.71        +2.29
+RP32  Beef steak tartare spiced (filet americain)  0.750  0.080  0.0600   19            29.31        −10.31
+RP18  Minced meat loaf fried                       0.600  0.080  0.0480   21            27.87        −6.87
+RP33  Croissant with ham and cheese                0.220  0.180  0.0396   16            26.31        −10.31
+RP53  Sausage Dutch Frikandel (deep-fried)         0.660  0.050  0.0330   21            26.29        −5.29
+RP14  Soup legume based ready-made prepared        0.088  0.344  0.0303   20            18.39        +1.61
+RP17  Soup thickened with meat and vegetables      0.061  0.424  0.0259   32            21.42        +10.58
+RP50  Bread stuffed Bapao meat                     0.230  0.090  0.0207   25            23.01        +1.99
+RP26  Lasagne bolognese                            0.120  0.149  0.0179   32            14.11        +17.89
+RP30  Spaghetti bolognese                          0.057  0.218  0.0124   25            13.47        +11.53
+RP20  Chinese noodle ball (bamischijf) fried       0.131  0.091  0.0119   37            20.39        +16.61
+RP16  Nasi with chicken saté                       0.145  0.064  0.0093   27            18.18        +8.82
+RP9   Olvarit stew with chicken 6m                 0.120  0.060  0.0072   13            19.99        −6.99
+RP19  Soup clear with meat vegetables and noodles  0.020  0.152  0.0030   21            22.39        −1.39
+RP22  Soup clear with meat and vegetables          0.080  0.030  0.0024   37            18.28        +18.72
+RP48  Pizza margherita (warm)                      0.010  0.240  0.0024   15            15.59        −0.59
+RP34  Springroll frozen (deep-fried)               0.035  0.051  0.0018   26            13.87        +12.13
+RP49  Croquette meat ragout frozen (deep-fried)    0.100  0.015  0.0015   25            13.35        +11.65
+
+
+Read the ordering carefully. The five recipes with the largest phi_syn are mostly over-predicted
+(four of five have negative residuals), while the large positive residuals sit at small phi_syn
+(RP22, RP34, RP49, RP20, RP26). That is the opposite of the pattern a synergy term would need. §5
+quantifies it.
+
+
+....................................................................................................
+
+
+====================================================================================================
+5. Step 3 — Residual diagnostic
+====================================================================================================
+
+
+results/step3_residual_diagnostic.csv, results/step3_residual_diagnostic_other_vars.csv. Figure:
+figures/fig2_residual_vs_phisyn.png.
+
+Umami LOOCV residual (actual − predicted, current 10-feature hybrid) regressed on phi_syn:
+
+
+subset           n   OLS slope  SE      p      R²      Spearman ρ  Spearman p
+-----------------------------------------------------------------------------
+all recipes      70  −12.49     65.73   0.850  0.0005  +0.210      0.080
+co-present only  18  −258.86    100.83  0.021  0.292   −0.494      0.037
+
+
+Two things, and they point the same way:
+
+1. Across all 70 recipes there is nothing. Slope p = 0.85, R² = 0.0005. The Spearman ρ = +0.21 (p =
+   0.08) is not evidence for synergy — it is driven almost entirely by the 52 tied zeros versus the 18
+   non-zeros, i.e. it says "recipes containing both meat and glutamate-rich items tend to be
+   under-predicted", which is a statement about savoury dishes in general, not about the product.
+   Consistent with this, the same Spearman ρ ≈ 0.21 appears for every monotone transform of phi_syn
+   (sqrt, log1p, ×conc, ×conc², broad classes) — a rank statistic cannot distinguish them, so it
+   carries no information about multiplicativity specifically.
+2. Within the 18 co-present recipes the relationship is significantly NEGATIVE (slope −259, p = 0.021;
+   ρ = −0.49, p = 0.037). Higher phi_syn → the current model over-predicts umami. This is the opposite
+   sign to the synergy hypothesis. I do not claim this is a real anti-synergy effect: with n = 18 and
+   44% of the phi_syn mass in 3 recipes, it is more plausibly the confound that f_nucleotide (and hence
+   phi_syn) is 0.84-correlated with protein_frac, which the model already uses, so high-meat recipes
+   are already handled and the residual there reflects something else. But it does mean the data give
+   no support in the hypothesised direction.
+
+Same diagnostic across all 70 recipes for the related variables:
+
+
+variable                 OLS slope  p      R²     Spearman ρ  Spearman p
+------------------------------------------------------------------------
+f_nucleotide             +2.18      0.604  0.004  +0.224      0.062
+f_glutamate              +3.76      0.460  0.008  +0.248      0.039
+phi_syn × conc           +12.99     0.827  0.001  +0.211      0.080
+phi_syn × conc²          +39.86     0.400  0.010  +0.213      0.077
+log1p(phi_syn)           −11.53     0.865  0.000  +0.211      0.080
+sqrt(phi_syn)            +12.19     0.370  0.012  +0.211      0.080
+phi_syn (broad classes)  −18.19     0.768  0.001  +0.207      0.086
+
+
+No variable clears p = 0.05 on the linear fit. Note that the main effects have slightly larger R²
+than the product — the little signal there is is not interaction-shaped.
+
+
+....................................................................................................
+
+
+====================================================================================================
+6. Steps 4 & 5 — Adding the feature and rerunning
+====================================================================================================
+
+
+results/step5_umami_variants.csv, results/step4_umami_coefficient_comparison.csv,
+results/step4_all_dimensions.csv. Figures: figures/fig3_variant_mae.png,
+figures/fig4_umami_pred_vs_actual.png.
+
+Everything is held identical to the baseline: same Lasso, same alpha grid np.logspace(-3,1,30), same
+LOOCV, same within-fold standardisation. The only change is which columns enter X.
+
+
+6.1 Step 4 — umami, current vs + phi_syn
+----------------------------------------
+
+
+                                    baseline (10 feat)  + phi_syn (11 feat)  change
+-----------------------------------------------------------------------------------
+MAE                                 5.746               5.810                +0.064 (worse)
+RMSE                                7.497               7.553                +0.056 (worse)
+PCC                                 0.7245              0.7193               −0.005
+Bias                                +0.210              +0.231               +0.021
+alpha (full-data fit)               0.2212              0.3039               —
+alpha across LOOCV folds (min–max)  0.033 – 0.418       0.085 – 0.574        —
+
+
+Coefficient on phi_syn: exactly 0.0 on the full-data fit. Across the 70 LOOCV folds it is non-zero
+in 3 folds (4.3%). In other words, Lasso looks at the feature and discards it almost every time it
+is offered. Note also that adding the useless feature raised the selected alpha (0.221 → 0.304),
+i.e. the CV responded by shrinking everything harder — which is why MAE got slightly worse rather
+than staying flat.
+
+
+6.2 Did any other coefficient move?
+-----------------------------------
+
+
+Umami full-data-fit coefficients (standardised features):
+
+
+feature             baseline  + phi_syn          Δ                  sign flip
+-----------------------------------------------------------------------------
+umami_hs_mid        0.0000    0.0000     0.0000  no
+umami_voigt         +5.6192   +5.6370    0.018   no
+protein_frac        +0.1608   0.0000     0.161   dropped to zero
+sugar_frac          −0.1342   −0.1842    0.050   no
+maillard_potential  −0.6245   −0.5042    0.120   no
+salt_frac           +0.0014   +0.0036    0.002   no
+water_frac          0.0000    0.0000     0.000   no
+conc_factor         +4.7579   +4.6344    0.124   no
+allium_frac         +3.4869   +3.3711    0.116   no
+fermented_frac      +0.7364   +0.6238    0.113   no
+phi_syn             —         0.0000     —       —
+
+
+Nothing changed materially. No true sign flips. The only structural change is protein_frac being
+shrunk from +0.161 to exactly 0 — an artefact of the higher selected alpha, and on a coefficient
+that was already ~30× smaller than umami_voigt and conc_factor. The model is, and remains, dominated
+by the Voigt bound, the concentration factor, and the allium fraction.
+
+
+6.3 Step 4 — the other four dimensions with phi_syn included
+------------------------------------------------------------
+
+
+taste   model     MAE    RMSE    PCC     Bias    phi_syn coef (full fit)  phi_syn non-zero in LOO folds
+-------------------------------------------------------------------------------------------------------
+sweet   baseline  7.629  12.970  0.6845  −0.556  —                        —
+sweet   +phi_syn  7.581  12.677  0.6989  −0.484  −0.0000                  12.9%
+sour    baseline  6.296  9.117   0.7411  +0.326  —                        —
+sour    +phi_syn  6.413  9.257   0.7332  +0.324  −0.7063                  97.1%
+bitter  baseline  0.956  1.626   −0.098  −0.113  —                        —
+bitter  +phi_syn  0.950  1.618   −0.096  −0.107  −0.0906                  94.3%
+umami   baseline  5.746  7.497   0.7245  +0.210  —                        —
+umami   +phi_syn  5.810  7.553   0.7193  +0.231  0.0000                   4.3%
+salty   baseline  9.158  11.322  0.6376  +0.300  —                        —
+salty   +phi_syn  9.310  11.370  0.6320  +0.133  +0.6274                  100%
+
+
+Does it hurt anything? Marginally. Sour gets worse by 0.117 MAE points and salty by 0.152; sweet
+improves by 0.048 and bitter by 0.006. All four movements are far smaller than the seed-to-seed
+noise measured in §7 (SD ≈ 0.24–0.27 MAE points), so none of them is real. The instructive detail is
+the pattern: phi_syn is retained in ≥94% of folds for sour, bitter and salty — dimensions where it
+has no mechanistic business being — and discarded in 96% of folds for umami, the one dimension where
+the reviewer's mechanism predicts it should matter. That is the signature of a feature acting as an
+arbitrary proxy for "is this a savoury meat dish", not as a synergy term.
+
+
+6.4 Step 5 — all variants, one table
+------------------------------------
+
+
+Umami, LOOCV. Baseline is the first row. Lower MAE is better; no variant beats it.
+
+
+variant                                  n feat  MAE     RMSE    PCC     Bias    alpha (full fit)  ΔMAE vs baseline (points)  ΔMAE %  new-feature coef (full fit)  non-zero in LOO folds
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+baseline (10 feat)                       10      5.7462  7.4972  0.7245  +0.210  0.2212            —                          —       —                            —
+a. + phi_syn                             11      5.8102  7.5533  0.7193  +0.231  0.3039            +0.0640                    +1.11%  0.0000                       4.3%
+b. + phi_syn/(1−v_water)                 11      5.8487  7.5844  0.7169  +0.239  0.3039            +0.1024                    +1.78%  0.1511                       90.0%
+c. + phi_syn/(1−v_water)²                11      5.7511  7.4816  0.7257  +0.149  0.3039            +0.0049                    +0.08%  0.7991                       100%
+d. + log1p(phi_syn)                      11      5.8113  7.5551  0.7191  +0.232  0.3039            +0.0650                    +1.13%  0.0000                       5.7%
+e. + sqrt(phi_syn)                       11      5.7724  7.5332  0.7218  +0.139  0.3039            +0.0261                    +0.45%  1.0030                       100%
+f. + f_nuc, f_glu (control, no product)  12      5.8901  7.5592  0.7186  +0.186  0.4175            +0.1438                    +2.50%  +0.7264, +0.9513             100%, 100%
+g. + f_nuc, f_glu, phi_syn (extra)       13      5.8935  7.5520  0.7192  +0.186  0.4175            +0.1473                    +2.56%  +0.726, +0.951, 0.000        100%, 100%, 1.4%
+h. + phi_syn w/ broad classes (extra)    11      5.8409  7.5657  0.7181  +0.232  0.3039            +0.0947                    +1.65%  0.0000                       4.3%
+
+
+Notes on the variants, since the pattern matters more than the numbers:
+
+- (b), (c), (e) look "retained" but are not evidence. The concentration-scaled and sqrt forms are kept
+  in 90–100% of folds, whereas the raw product (a) and log form (d) are discarded. The difference is
+  not mechanistic: phi_syn is zero in 52 recipes and tiny (max 0.065) in the rest, so after
+  within-fold standardisation the raw product is a near-degenerate spike that Lasso shrinks away,
+  while multiplying by conc_factor² (range 1–10) or taking sqrt spreads it out enough to survive the
+  penalty. Being selected and being useful are different things — (c) is retained in 100% of folds and
+  still has worse MAE than baseline.
+- (c) is the closest to a tie: ΔMAE +0.005 points (i.e. worse by half a hundredth of a point), with
+  RMSE 0.016 better and PCC 0.001 better. This is noise, and §7's permutation test treats it as such.
+- (f), the control, is the most informative row. Adding the two class fractions without any product is
+  worse than adding the product (+0.144 vs +0.064) and worse than baseline. So the missing ingredient
+  is not "a main effect the model lacked" either. Both classes are already substantially represented:
+  f_nucleotide correlates r = 0.84 with the existing protein_frac and r = 0.64 with umami_voigt;
+  f_glutamate correlates r = 0.43 with allium_frac. See §7.3.
+- (g) — the textbook interaction specification (both main effects plus the product) — zeroes the
+  product in 98.6% of folds while keeping both main effects. If a genuine interaction existed, this is
+  the specification that would find it.
+- (h) shows the verdict does not hinge on my ambiguous class assignments: swapping in the broad
+  glutamate list (mozzarella, cream cheese, yoghurt, capers, olives, sambal, peanut sauce) changes MAE
+  by 0.03 points and leaves the coefficient at exactly zero.
+
+
+....................................................................................................
+
+
+....................................................................................................
+
+
+====================================================================================================
+7. Step 6 — Robustness
+====================================================================================================
+
+
+results/step6_kfold_robustness.csv, results/step6_permutation_test.csv, results/sup_*.csv. Figures:
+figures/fig5_permutation_null.png, figures/fig6_kfold_robustness.png.
+
+
+7.1 Repeated 10-fold CV (5 seeds), umami
+----------------------------------------
+
+
+Seeds 0–4, KFold(n_splits=10, shuffle=True, random_state=seed), everything else identical. "Paired
+Δ" is the mean of the per-seed difference against the baseline on the same fold split, which removes
+split-to-split noise.
+
+
+variant                      10-fold MAE, mean ± SD  paired Δ vs baseline ± SD
+------------------------------------------------------------------------------
+baseline (10 feat)           5.850 ± 0.271           —
+a. + phi_syn                 5.916 ± 0.265           +0.066 ± 0.015 (worse in 5/5 seeds)
+b. + phi_syn × conc          5.924 ± 0.238           +0.074 ± 0.044
+c. + phi_syn × conc²         5.893 ± 0.236           +0.043 ± 0.099
+d. + log1p(phi_syn)          5.917 ± 0.265           +0.067 ± 0.016
+e. + sqrt(phi_syn)           5.929 ± 0.218           +0.079 ± 0.122
+f. + main effects (control)  5.958 ± 0.271           +0.108 ± 0.023
+g. + main effects + phi_syn  6.042 ± 0.269           +0.192 ± 0.034
+h. + phi_syn broad classes   5.924 ± 0.248           +0.074 ± 0.030
+
+
+The LOOCV result is not an artefact of LOOCV. Under 10-fold CV every variant is worse than the
+baseline, and for variant (a) it is worse in all five seeds with a paired SD of only 0.015 — the
+degradation is small but entirely consistent. Note also that the seed-to-seed SD of the MAE itself
+(±0.27) is four times larger than any variant's effect, which is the right scale on which to read
+every number in this report.
+
+
+7.2 Permutation test (1000 shuffles)
+------------------------------------
+
+
+phi_syn was shuffled across the 70 recipes 1000 times (seeded, default_rng(20260727)); for each
+shuffle the full 11-feature LOOCV was refit and the MAE improvement (baseline MAE − variant MAE;
+positive = the feature helps) recomputed.
+
+
+variant               true improvement (points)  true improvement (%)  null mean ± SD    null [p5, p95]    true value's percentile in null  one-sided p
+-------------------------------------------------------------------------------------------------------------------------------------------------------
+a. + phi_syn          −0.0640                    −1.11%                −0.0965 ± 0.1172  [−0.295, +0.085]  63rd                             0.371
+c. + phi_syn × conc²  −0.0049                    −0.09%                −0.0915 ± 0.1102  [−0.253, +0.086]  88th                             0.121
+
+
+Read this carefully, because it is the cleanest statement of the null result:
+
+- The true improvement is negative for both variants. There is no improvement to test for
+  significance.
+- The real phi_syn sits at the 63rd percentile of what a randomly shuffled phi_syn achieves. A random
+  relabelling of which recipes are "synergistic" performs about as well as the chemically motivated
+  one. Two-thirds of random shuffles do worse — but that is because any extra column typically costs a
+  little MAE, not because the real one carries signal.
+- Even the best-behaved variant (c) only reaches the 88th percentile, p = 0.121 — short of
+  significance, and its "improvement" is still negative in absolute terms.
+- Note the null distribution is centred at −0.097, not 0. Adding a random column costs about a tenth
+  of an MAE point on average. That is the price of the extra parameter under this alpha grid, and it
+  is the correct benchmark against which −0.064 should be judged.
+
+
+7.3 Is the interaction identifiable at all? (supplementary)
+-----------------------------------------------------------
+
+
+results/sup_collinearity.csv, sup_redundancy_r2.csv, sup_oracle_ceiling.csv, sup_power.csv. This was
+not in the brief; it was added because it is the diagnostic that actually explains the null and it
+is what determines how to answer the reviewer.
+
+(i) The classes are already largely in the model. Pearson r against existing features:
+
+
+              protein_frac  umami_hs_mid  umami_voigt  allium_frac
+------------------------------------------------------------------
+f_nucleotide  +0.84         +0.64         +0.62        +0.08
+f_glutamate   −0.19         +0.30         +0.32        +0.43
+phi_syn       +0.53         +0.52         +0.50        +0.28
+
+
+Regressing each candidate on the 10 existing features: f_nucleotide is 88.3% explained (VIF 8.5),
+f_glutamate 48.5%, phi_syn 47.0%. The nucleotide class is very nearly a relabelling of protein_frac.
+
+(ii) The oracle ceiling. Unregularised OLS, in-sample, no CV — i.e. the most generous possible test,
+with the feature allowed to overfit freely:
+
+
+model              in-sample MAE  in-sample R²  ΔMAE    partial F (1 df)  p
+---------------------------------------------------------------------------
+baseline 10 feat   4.992          0.629         —       —                 —
++ phi_syn          4.988          0.631         −0.004  0.20              0.660
++ phi_syn × conc   4.990          0.629         −0.003  0.00              0.944
++ phi_syn × conc²  4.979          0.634         −0.013  0.69              0.411
++ log1p(phi_syn)   4.989          0.630         −0.003  0.18              0.677
++ sqrt(phi_syn)    4.983          0.635         −0.009  0.91              0.344
++ phi_syn broad    4.980          0.631         −0.012  0.29              0.593
++ f_nucleotide     4.948          0.633         −0.045  0.57              0.455
++ f_glutamate      4.939          0.635         −0.053  0.85              0.360
+
+
+This is the decisive row set. Even with regularisation switched off and no cross-validation at all,
+the absolute best phi_syn can do is 0.004 MAE points, partial F p = 0.66. The LOOCV degradation is
+therefore not "Lasso being too conservative" — there is simply nothing there to find.
+
+(iii) Statistical power. OLS standard error on the phi_syn coefficient is 86.1. The minimum
+coefficient detectable at 2 SE is 168.8, which at the largest observed phi_syn (0.065) corresponds
+to an 11.0-point umami shift on the 0–100 scale — roughly one full SD of the umami ground truth (SD
+= 10.9). The fitted coefficient is −38.1 (a −2.5-point shift at max phi_syn).
+
+  | **This study can only detect a synergy effect large enough to move umami by ~11 points
+  | at the single most synergistic recipe in the dataset.** Anything smaller is invisible
+  | here regardless of how the feature is specified. Combined with 18 co-present recipes and
+  | 44% of the phi_syn mass in 3 of them, the honest description is: *the design is
+  | underpowered for this question by roughly an order of magnitude.*
+
+
+....................................................................................................
+
+
+....................................................................................................
+
+
+====================================================================================================
+8. Verdict
+====================================================================================================
+
+
+Does the interaction term help?
+-------------------------------
+
+
+No. It does nothing, and slightly hurts. Umami LOOCV MAE goes from 5.746 to 5.810, i.e. 0.064 points
+worse on the 0–100 scale (−1.11%). Lasso assigns it a coefficient of exactly zero on the full-data
+fit and in 96% of LOOCV folds. Under repeated 10-fold CV it is worse in 5/5 seeds. In a 1000-shuffle
+permutation test the real feature sits at the 63rd percentile of the random-shuffle null (p = 0.371)
+— a randomly relabelled phi_syn performs about as well. None of the five requested variants beats
+the baseline; the best (phi_syn × conc²) is +0.005 MAE points worse. The main-effects-only control
+(f) is worse still (+0.144), so this is not a case of a missing main effect masquerading as a
+missing interaction either.
+
+For absolute scale: the umami ground truth has mean 15.0 and SD 10.9, and the current model's MAE is
+5.75 points. The largest effect any variant produces in any direction is 0.15 points, against a
+seed-to-seed CV noise floor of ±0.27 points.
+
+
+Is it identifiable given n?
+---------------------------
+
+
+No, and this is the more important answer. Three independent facts say so:
+
+1. 18 of 70 recipes have both classes present. The other 52 carry zero information about the product.
+   The top 3 recipes hold 44% of the total phi_syn mass.
+2. The classes are already in the model. f_nucleotide is 88% linearly explained by the existing 10
+   features (r = 0.84 with protein_frac alone). The "new" feature is largely a re-encoding of what
+   protein_frac, umami_voigt and allium_frac already carry.
+3. Minimum detectable effect ≈ 11 umami points at the most synergistic recipe in the dataset — about
+   one full SD of the ground truth. Real IMP×Glu synergy in the literature is a large sensory effect
+   but would have to be implausibly large at these mass fractions and this measurement precision to
+   clear that bar.
+
+So the finding is "this dataset cannot see it", not "synergy does not exist". Those are different
+claims and the report should not be used to make the second one.
+
+
+One thing the reviewer's framing gets wrong, worth saying in the response
+-------------------------------------------------------------------------
+
+
+The objection states that the model "cannot represent" multiplicative effects because every feature
+is additive. That is not accurate: maillard_potential = protein_frac × sugar_frac is already a
+product of two mass fractions, and it is one of the eight chemistry proxies. The architecture admits
+products; the model is linear in features, not in ingredients. The accurate version of the objection
+is narrower — this particular product was not among the eight — and this report answers that
+narrower version directly: we added it, in six specifications, and it contributed nothing.
+
+
+What would be needed to settle it
+---------------------------------
+
+
+In rough order of leverage:
+
+1. Recipes designed for the contrast. A factorial set — nucleotide-only, glutamate-only, both, neither
+   — at matched total savoury mass. Even 20–30 such recipes would beat 70 opportunistic ones, because
+   the current design confounds phi_syn with "is this a meat dish" (r = 0.53 with protein_frac).
+2. Actual measured concentrations, not name-keyed mass fractions. IMP/GMP and free glutamate in mg/100
+   g, or at minimum a per-ingredient lookup from a food-composition database. The current proxy assumes
+   every gram of "Minced beef raw" delivers the same IMP as every gram of "Cod boiled", and that mass
+   fraction is proportional to concentration in the aqueous phase. Both are strong assumptions and
+   neither is testable with this dataset.
+3. Ingredients that isolate the mechanism. The dataset has no mushroom, no yeast extract, no bouillon,
+   no fish sauce, no seaweed, no anchovy-as-such — precisely the ingredients where nucleotide and
+   glutamate content are high and dissociable. One fish item exists, in one recipe.
+4. A power calculation before the next round. Given the ~86-unit SE, resolving a synergy effect of,
+   say, 3 umami points at max phi_syn would require roughly a 10–15× reduction in that SE — achievable
+   mainly through (1) and (2), not through more recipes of the same opportunistic kind.
+
+
+Suggested shape of the reviewer response
+----------------------------------------
+
+
+State that (a) the architecture already contains a multiplicative term, so the objection's premise
+is too strong; (b) the specific IMP×Glu product was tested in six specifications plus a main-effects
+control and a permutation test, and changed umami MAE by −0.06 points (worse), with the coefficient
+zeroed in 96% of LOOCV folds; (c) the honest reason is that only 18/70 recipes are co-present and
+the design's minimum detectable effect is ~11 umami points, so the study is underpowered for this
+mechanism; and (d) name it as a limitation with the specific experiment that would settle it.
+Reporting (c) and (d) is stronger than adding a feature that does nothing.
+
+
+....................................................................................................
+
+
+====================================================================================================
+9. What I could not do, and why
+====================================================================================================
+
+
+1. Reconcile the "209 ingredients" claim. The dataset has 115 unique ingredient names and 510
+   ingredient instances. I could not derive 209 under any counting rule I tried. The manuscript itself
+   later says "115 per-ingredient features", so the abstract's 209 may be an error or may refer to a
+   source table not in this repo. This should be checked before submission — it is in the abstract and
+   in the Figure 1 caption. I did not change anything; I used the 115 that exist.
+2. Test true nucleotide/glutamate concentrations. No compositional data exist in this repo — only
+   per-ingredient sensory scores and mass fractions. Every class fraction here is a name-keyed mass
+   proxy, which is the same level of rigour as the existing eight chemistry features but is a real
+   limitation for a mechanism that is concentration- and ratio-dependent (the classic IMP:Glu synergy
+   is strongly ratio-dependent, and mass fraction cannot express a ratio of concentrations).
+3. Cover the spec's full class definitions. Shellfish, anchovy-as-such, mushroom, yeast extract,
+   bouillon/stock cubes, fish sauce, seaweed and corn have no representative in this dataset. The
+   classes tested are the intersection of the spec with what exists.
+4. Fix a pre-existing bug I noticed. WATER_PAT = r'(?i)^water' also matches "Water chestnut", so any
+   recipe containing water chestnut gets inflated water_frac and conc_factor. I deliberately left it
+   alone — fixing it would change the baseline this whole comparison is against, and the brief said not
+   to change pipeline logic. Flagging it as a separate item worth a look.
+5. Resolve the Worcestershire dual-class assignment. It is legitimately both a fermented (glutamate)
+   and an anchovy-containing (nucleotide) ingredient. I assigned it to glutamate only. Assigning it to
+   both would let one ingredient generate phi_syn by itself, which is not what synergy means. I did not
+   run a third sensitivity for it; given that the broad-class sensitivity (h) moved MAE by 0.03 points,
+   it would not change anything.
+6. Say anything useful about bitterness. Its ground truth is mean 1.57, SD 1.38, with 87% of values ≤ 3
+   — a floor effect. Baseline PCC is −0.098. Its numbers are reported for completeness but are not
+   interpretable, consistent with how the repo already excludes bitter from 4-D averages.
+7. Establish that the negative within-co-present slope (§5) means anything. It is nominally significant
+   (p = 0.021, Spearman p = 0.037) but it is a post-hoc subset of n = 18 with 44% of the leverage in 3
+   recipes, and phi_syn is confounded with protein_frac (r = 0.53). I report it because it is the
+   opposite of the hypothesised direction and the brief asked for honest reporting, but I would not put
+   it in a manuscript as a finding.
+
+
+....................................................................................................
+
+
+====================================================================================================
+10. Files produced
+====================================================================================================
+
+
+Scripts (all in synergy_test/)
+------------------------------
+
+
+file                    what it does
+------------------------------------
+core.py                 model code copied from Hybrid/src/hybrid_analysis.py; deviations listed in core.DEVIATIONS
+ingredient_classes.py   the two class lists + every ambiguity note
+run_analysis.py         Steps 0–5
+run_robustness.py       Step 6 (10-fold × 5 seeds, 1000-shuffle permutation)
+run_identifiability.py  supplementary collinearity / oracle-ceiling / power diagnostics
+replot_fig5.py          redraws fig5 from cached nulls without rerunning the permutation
+make_figure_s3.py       composes Figure_S3.pdf for Supplementary S12 from the cached CSV/npy only; no analysis is rerun
+make_txt_report.py      renders REPORT.md to plain-text REPORT.txt
+vendor/                 verbatim copies of compute_bounds.py, env_config.py, plot_config.py, and hybrid_analysis_ORIGINAL.py (untouched reference)
+data/raw_recipes.py     byte-identical copy of the dataset
+
+
+Reproduce with: cd synergy_test && python3 run_analysis.py && python3 run_identifiability.py &&
+python3 run_robustness.py (the last takes ~15 min; the others ~1 min each).
+
+
+Figures (synergy_test/figures/, 600 dpi)
+----------------------------------------
+
+
+figure                         content
+--------------------------------------
+fig1_class_coverage.png        distributions of f_nucleotide, f_glutamate, and the co-presence scatter (18/70 highlighted)
+fig2_residual_vs_phisyn.png    Step 3: umami LOOCV residual vs phi_syn, with OLS fit and the 52 zeros shown separately
+fig3_variant_mae.png           Step 5: umami LOOCV MAE by variant, on a true zero-based axis and zoomed (axis truncation labelled)
+fig4_umami_pred_vs_actual.png  Step 4: predicted vs actual umami, baseline vs + phi_syn
+fig5_permutation_null.png      Step 6: 1000-shuffle null distributions with the true improvement marked
+fig6_kfold_robustness.png      Step 6: 10-fold MAE mean ± SD across 5 seeds by variant
+Figure_S3.pdf / .png           Supplementary S12 figure, four panels: (A) class co-presence with marginals, (B) umami residual vs phi_syn, (C) ΔMAE by specification (a)–(h), (D) permutation null with the paired 10-fold differences inset. Vector PDF, 600 dpi PNG preview. Mirrored to results/publication_figures/Figure_S3.pdf
+
+
+Result tables (synergy_test/results/, all CSV)
+----------------------------------------------
+
+
+file                                      content
+-------------------------------------------------
+ingredient_classes.csv                    both class lists, machine-readable
+ingredient_inventory.csv                  all 115 ingredients: usage counts, min/mean/max mass fraction, class flags
+recipe_ingredient_mass_fractions.csv      full 70 × 115 mass-fraction matrix
+step2_class_fraction_distributions.csv    distribution summary of f_nucleotide, f_glutamate, phi_syn
+step2_copresent_recipes.csv               the 18 co-present recipes with fractions, ground truth and residuals
+step2_all_recipes.csv                     same fields for all 70
+step3_residual_diagnostic.csv             OLS + Spearman, all recipes and co-present subset
+step3_residual_diagnostic_other_vars.csv  same diagnostic for the 7 related variables
+step4_umami_coefficient_comparison.csv    umami coefficients, baseline vs + phi_syn
+step4_all_dimensions.csv                  all 5 tastes, baseline vs + phi_syn
+step5_umami_variants.csv                  the full variant comparison table
+step6_kfold_robustness.csv                10-fold MAE per seed, mean ± SD, paired deltas
+step6_permutation_test.csv                permutation nulls and percentiles
+sup_collinearity.csv                      r between each synergy variable and each existing feature
+sup_redundancy_r2.csv                     R² and VIF of each synergy variable on the existing 10
+sup_oracle_ceiling.csv                    unregularised in-sample ceiling + partial F tests
+sup_power.csv                             SE, minimum detectable coefficient, implied umami shift
+
+
+Files prefixed _ (_analysis_df.pkl, _umami_baseline_pred.npy, _null_improvement_*.npy) are
+intermediates cached between scripts, not results.

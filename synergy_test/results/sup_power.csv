@@ -1,0 +1,2 @@
+n_recipes,n_phi_syn_nonzero,phi_syn_max,top3_share_of_phi_syn_mass,ols_coef_phi_syn,ols_se_phi_syn,min_detectable_coef_2se,min_detectable_shift_at_max_phi_points
+70,18,0.065,0.44118597231945783,-38.13267088573785,86.12113446825963,168.79742355778887,10.971832531256277

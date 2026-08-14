@@ -1,0 +1,33 @@
+ingredient,class
+Chicken fillet raw,NUCLEOTIDE
+Cod boiled,NUCLEOTIDE
+Ham lean boiled,NUCLEOTIDE
+Minced beef raw,NUCLEOTIDE
+Minced beef/pork raw,NUCLEOTIDE
+Pork fillet raw,NUCLEOTIDE
+Pork fillet raw (69%) + Beef (31%),NUCLEOTIDE
+Yeast,NUCLEOTIDE
+Tomato average raw,GLUTAMATE_PRIMARY
+Tomato puree/concentrate,GLUTAMATE_PRIMARY
+Cheese 20+,GLUTAMATE_PRIMARY
+Cheese Gouda 48+ average,GLUTAMATE_PRIMARY
+Soy sauce Kikkoman,GLUTAMATE_PRIMARY
+Vinegar,GLUTAMATE_PRIMARY
+Mustard,GLUTAMATE_PRIMARY
+Sauerkraut (zuurkool),GLUTAMATE_PRIMARY
+Spices/Worcestershire,GLUTAMATE_PRIMARY
+Onions raw,GLUTAMATE_PRIMARY
+Garlic,GLUTAMATE_PRIMARY
+Leek boiled,GLUTAMATE_PRIMARY
+Spring onion,GLUTAMATE_PRIMARY
+Spices/onion,GLUTAMATE_PRIMARY
+Herbs (parsley/garlic),GLUTAMATE_PRIMARY
+Peas frozen boiled,GLUTAMATE_PRIMARY
+Peas garden super fine tinned,GLUTAMATE_PRIMARY
+Cheese Mozzarella,GLUTAMATE_BROAD_ONLY
+Cheese cream soft Mon Chou,GLUTAMATE_BROAD_ONLY
+Yoghurt full fat,GLUTAMATE_BROAD_ONLY
+Capers,GLUTAMATE_BROAD_ONLY
+Olives tinned/glass,GLUTAMATE_BROAD_ONLY
+Spices/sambal,GLUTAMATE_BROAD_ONLY
+Peanut sauce jar prepared,GLUTAMATE_BROAD_ONLY
