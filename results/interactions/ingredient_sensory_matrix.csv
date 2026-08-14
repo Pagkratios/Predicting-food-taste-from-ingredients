@@ -1,0 +1,116 @@
+ingredient,n_recipes,sweet,bitter,salty,umami,sour
+Toast,8,3,1,9,0,1
+Butter unsalted,5,3,0,4,1,1
+Low fat margarine product tub Becel Light,4,1,0,3,1,1
+Syrup apple,1,64,3,6,1,29
+Honey,2,76,3,4,0,1
+Jam,1,74,1,3,0,19
+Peanut butter with nut pieces,1,24,2,33,8,4
+Butter salted,2,3,0,32,2,1
+Water,43,1,2,1,1,1
+Rice white boiled,4,3,2,2,4,2
+Tomato average raw,12,10,3,3,12,19
+Peas garden super fine tinned,2,15,1,11,6,2
+Carrots boiled average,13,15,1,2,3,2
+Oil sunflower seed,34,2,1,4,1,1
+Broccoli boiled,1,5,9,2,5,2
+Chicken fillet raw,10,6,1,18,13,7
+Potatoes wo skins boiled average,11,5,1,8,7,2
+Salt,57,0,0,100,0,0
+Leek boiled,7,6,5,2,3,3
+Onions raw,20,9,31,3,3,8
+Milk semi-skimmed,10,12,1,3,1,4
+Margarine 80% fat >24 g saturates,4,2,1,14,0,1
+French beans boiled,1,7,6,2,4,2
+Minced beef raw,8,4,1,22,11,3
+Kale curly boiled,1,5,15,3,4,2
+Peas frozen boiled,2,15,1,4,5,2
+Pork fillet raw,5,5,1,16,14,9
+Starch,17,2,0,0,1,0
+Celery,3,10,20,5,5,15
+Peanut sauce jar prepared,1,32,2,41,14,9
+Eggs chicken boiled average,17,5,1,10,8,2
+Sugar granulated,32,100,0,0,0,0
+Spices,7,5,25,8,15,5
+Pasta plain average boiled,7,3,1,3,1,2
+Minced beef/pork raw,1,4,1,24,12,2
+Black pepper,7,5,65,5,8,4
+White cabbage (raw),2,5,8,2,3,3
+Soy sauce Kikkoman,3,5,5,95,85,10
+Spices/ginger,1,10,5,5,5,15
+Spices/herbs,2,5,25,8,10,5
+Baguette white,1,8,1,18,0,3
+Herbs (parsley/garlic),1,8,22,4,6,8
+Tomato puree/concentrate,2,12,5,5,20,30
+Starch (maize),1,2,0,0,1,0
+Flour (wheat),13,3,2,1,4,1
+Ham lean boiled,2,5,0,46,31,5
+Cheese Gouda 48+ average,3,6,1,41,17,18
+Breadcrumbs,4,5,2,8,3,1
+Flour,1,3,2,1,4,1
+Carrots tinned,1,15,2,10,3,2
+Peanuts salted,2,8,2,40,7,1
+Peanuts coated,1,11,2,43,24,3
+Vinegar,11,3,3,2,1,90
+Mustard,7,6,10,37,5,47
+Mayonnaise,1,10,1,25,8,33
+Capers,2,2,8,55,10,40
+Spices/Worcestershire,1,8,10,30,30,25
+Milk whole,4,12,1,3,1,4
+Yeast,5,5,10,6,35,8
+Apple without skin average,3,20,2,1,0,38
+Raisins dried,2,51,0,2,1,11
+Cinnamon,2,55,15,2,5,3
+Lemon juice concentrate,1,7,8,1,1,97
+Leavening/sugar,1,100,0,0,0,0
+Garlic,8,12,12,3,55,6
+Spices/sambal,1,5,10,30,20,10
+Flour (wheat semolina),1,3,2,1,4,1
+Oil olive,7,1,17,3,1,0
+Yoghurt full fat,1,2,2,3,1,71
+Starch (wheat),1,2,0,0,1,0
+Citric acid,2,0,0,0,0,95
+Flour (wholemeal),1,3,2,1,4,1
+Basil fresh,1,6,18,3,5,8
+Almonds,1,5,12,2,6,1
+Pine nuts,1,9,6,8,4,2
+Cheese cream soft Mon Chou,1,7,1,21,4,15
+Cheese 20+,1,5,1,39,21,14
+Nutmeg,1,8,45,3,8,2
+Apple sauce tinned,1,46,0,2,2,21
+Cheese Mozzarella,1,2,1,9,3,7
+Herbs (oregano),1,5,40,5,8,8
+Beef gelatin,1,1,1,5,15,1
+Pork fillet raw (69%) + Beef (31%),1,5,1,16,14,9
+Sugars/dextrose,1,100,0,0,0,0
+Beans brown tinned,1,8,2,19,9,1
+Hazelnuts (walnuts proxy),1,5,12,2,6,1
+Cocoa powder,3,8,75,4,5,5
+Emulsifier/vanillin,1,0,0,0,0,0
+Whey,1,10,2,8,5,15
+Carob powder,1,20,15,3,3,3
+Walnuts unsalted,2,5,12,2,6,1
+Emulsifier/flavour,1,0,0,0,0,0
+Spices/flavourings,1,5,20,10,15,5
+Spring onion,1,8,15,3,4,5
+Water chestnut,1,8,2,2,3,2
+Sugars,1,100,0,0,0,0
+Ginger,1,10,5,5,5,15
+Cream,1,4,1,8,2,33
+Cod boiled,1,2,2,13,12,3
+Starch (potato),1,2,0,0,1,0
+Sauerkraut (zuurkool),1,2,5,25,3,75
+Caraway,1,5,35,3,5,3
+Herbs,1,8,22,4,6,8
+Curry spices,2,10,20,15,50,5
+Ascorbic acid,1,2,5,0,0,60
+Basil/herb extract,1,6,18,3,5,8
+Oregano,1,5,40,5,8,8
+Sugar/dextrose,1,100,0,0,0,0
+Spices/onion,1,9,31,3,3,8
+Cocoa butter,1,2,20,1,2,1
+Cocoa mass,1,3,65,2,5,3
+Butterfat,1,3,0,4,1,1
+Emulsifier,1,0,0,0,0,0
+Olives tinned/glass,1,4,4,31,18,6
+Lemon juice,1,7,8,1,1,97

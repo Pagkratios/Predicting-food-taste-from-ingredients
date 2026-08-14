@@ -1,0 +1,543 @@
+================================================================================
+CROSS-MODAL TASTE INTERACTION ANALYSIS -- FULL OVERVIEW
+Response to reviewer comment (1): "Lack of cross-modal interaction terms"
+================================================================================
+
+REVIEWER COMMENT
+----------------
+"The model does not account for perceptual taste interactions, such as sweetness
+suppressing bitterness, saltiness enhancing umami, or fat enhancing sweetness.
+In recipes containing high levels of sugar and salt, this may lead to noticeable
+errors."
+
+Three named mechanisms plus one falsifiable prediction about where errors should
+appear. All four are testable. This document records the tests and every number.
+
+
+================================================================================
+1. DATA
+================================================================================
+
+Source            data/raw_recipes.py (only input; no trained artifacts read)
+Recipes           70
+Unique ingredients 115
+Taste dimensions  sweet, bitter, salty, umami, sour  (0-100 scale)
+
+Three matrices are built:
+
+  profiles  (115 x 5)  each unique ingredient's raw sensory scores
+  mixture   (70 x 5)   weight-normalised average of ingredient scores
+                       = the ADDITIVE, INTERACTION-FREE prediction
+  measured  (70 x 5)   the panel's actual recipe scores
+
+Chemistry features (same regexes as Hybrid/src/hybrid_analysis.py) used in the
+control analyses: protein_frac, sugar_frac, maillard_potential, salt_frac,
+water_frac, conc_factor, allium_frac, fermented_frac.
+
+Coverage of the derived composition features:
+  sugar_frac   median 0.010   max 0.504   non-zero in 39/70 recipes
+  salt_frac    median 0.010   max 0.050   non-zero in 57/70 recipes
+  fat_frac     median 0.200   max 0.950   non-zero in 63/70 recipes
+  (fat proxy: butter|oil|cream|margarine|mayonnaise|lard|ghee|coconut milk)
+
+
+================================================================================
+2. METHOD
+================================================================================
+
+2.1 THE ADDITIVE BASELINE
+The five mixture taste values are z-scored, then an ordinary linear regression
+maps them to each measured taste. Coefficients are found by least squares:
+minimise the sum of squared errors over the training recipes.
+
+2.2 RESIDUALS
+Every prediction is LEAVE-ONE-OUT: recipe i is predicted by a model fit on the
+other 69. Residual = measured - out-of-sample prediction, in raw 0-100 points.
+Positive = the recipe tasted stronger than the sum of its ingredients.
+
+Why LOO matters: in-sample residuals are mechanically orthogonal to the fitted
+features and shrunk toward zero, so finding no structure would prove nothing.
+LOO residuals are genuine predictive failures and are free to correlate with
+whatever actually drives them.
+
+2.3 INTERACTION TERMS
+All 10 pairwise products of the z-scored mixture features:
+  sweet x bitter, sweet x salty, sweet x umami, sweet x sour, bitter x salty,
+  bitter x umami, bitter x sour, salty x umami, salty x sour, umami x sour
+
+Because the inputs are centred, a product is a CO-DEVIATION score, not an
+intensity: positive when both channels are unusually high OR both unusually low,
+negative when they pull apart. Without centring the product would merely track
+overall recipe intensity.
+
+2.4 THE TEST LOGIC
+If perception multiplies two channels, the additive model should fail exactly
+where that product is large. So: correlate each residual against each product
+term. 5 residuals x 10 products = 50 tests, Benjamini-Hochberg FDR corrected.
+
+2.5 POWER
+At N = 70, residual-interaction correlations are detectable only down to
+|r| ~ 0.33 (80% power, alpha = 0.05, two-sided). Smaller effects cannot be
+excluded by these analyses.
+
+
+================================================================================
+3. RESULTS
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1  TASTE-TASTE CORRELATION AT THREE LEVELS
+--------------------------------------------------------------------------------
+The point: recipe-level taste correlations look dramatic but are INHERITED from
+which ingredients get cooked together, and the additive model absorbs almost all
+of them.
+
+INGREDIENT PROFILES (n = 115)          RECIPE MEASURED (n = 70)
+  sweet-bitter   -0.148  p 0.115         sweet-bitter   +0.363  p 0.0020
+  sweet-salty    -0.155  p 0.099         sweet-salty    -0.533  p 2.1e-06
+  sweet-umami    -0.152  p 0.106         sweet-umami    -0.434  p 0.00017
+  sweet-sour     -0.092  p 0.328         sweet-sour     -0.017  p 0.888
+  bitter-salty   -0.149  p 0.113         bitter-salty   -0.378  p 0.0012
+  bitter-umami   +0.069  p 0.463         bitter-umami   -0.377  p 0.0013
+  bitter-sour    -0.072  p 0.447         bitter-sour    -0.041  p 0.737
+  salty-umami    +0.511  p 5.5e-09 ***   salty-umami    +0.731  p 6.7e-13 ***
+  salty-sour     +0.014  p 0.880         salty-sour     +0.043  p 0.727
+  umami-sour     -0.065  p 0.490         umami-sour     -0.034  p 0.780
+
+LOO RESIDUALS (n = 70)  -- what survives after the additive model does its job
+  sweet-bitter   -0.007  p 0.958      <- suppression hypothesis: GONE (was +0.363)
+  sweet-salty    -0.256  p 0.032
+  sweet-umami    -0.066  p 0.586      <- was -0.434
+  sweet-sour     -0.098  p 0.418
+  bitter-salty   -0.221  p 0.067
+  bitter-umami   -0.287  p 0.016
+  bitter-sour    +0.189  p 0.117
+  salty-umami    +0.616  p 1.4e-08 ***  <- the one that survives
+  salty-sour     +0.144  p 0.233
+  umami-sour     -0.021  p 0.864
+
+ROBUSTNESS OF THE SALTY-UMAMI RESIDUAL CORRELATION
+  full r = +0.616
+  jackknife range over 70 leave-one-out refits: [+0.562, +0.686]
+  3 most influential recipes: Crisps potato light unflavoured; Stock from cube
+    prepared; Pasta plain average boiled
+  after removing all three: r = +0.614, p < 0.0001
+
+  -> The most robust number in the analysis. No outlier carries it.
+  -> But it is ERROR CO-MOVEMENT, not an interaction: the two attributes already
+     correlate at r = 0.511 in the raw ingredients, before any perception.
+
+INGREDIENT-LEVEL SALTY-UMAMI ROBUSTNESS
+  r = +0.511, p = 5.48e-09, n = 115; jackknife range [+0.313, +0.626]
+
+--------------------------------------------------------------------------------
+3.2  RESIDUAL x INTERACTION TERM -- 50 TESTS
+--------------------------------------------------------------------------------
+7 of 50 reach nominal p < 0.05. 2 survive Benjamini-Hochberg q < 0.05.
+Largest correlation anywhere in the 50: |r| = 0.437.
+
+SURVIVING FDR:
+  sweet residual x (bitter x umami)   r = +0.437   p = 1.57e-04   q = 0.0078
+  sour  residual x (sweet  x sour)    r = -0.399   p = 6.19e-04   q = 0.0155
+
+NOMINAL ONLY (do not survive correction):
+  sweet residual x (sweet  x bitter)  r = -0.241   p = 0.044   q = 0.316
+  sweet residual x (bitter x salty)   r = +0.259   p = 0.030   q = 0.253
+  salty residual x (bitter x umami)   r = -0.288   p = 0.016   q = 0.156
+  sour  residual x (salty  x sour)    r = +0.329   p = 0.0055  q = 0.090
+  sour  residual x (umami  x sour)    r = +0.319   p = 0.0072  q = 0.090
+
+Neither FDR survivor corresponds to any described perceptual mechanism.
+
+ROBUSTNESS OF THE TWO SURVIVORS
+  sweet x (bitter x umami)
+    full r = +0.437; jackknife [+0.389, +0.461]
+    3 most influential: Tapenade olive; Sauce tomato ready made jar;
+      Spread chocolate hazelnut
+    after removing all three: r = +0.280, p = 0.022   -> HOLDS
+
+  sour x (sweet x sour)
+    full r = -0.399; jackknife [-0.509, -0.166]
+    3 most influential: Apple sauce tinned; Ketchup tomato;
+      Apple pie Dutch with shortbread
+    after removing all three: r = -0.226, p = 0.066   -> LOSES SIGNIFICANCE
+
+--------------------------------------------------------------------------------
+3.3  ADDING ALL TEN INTERACTION TERMS AT ONCE
+--------------------------------------------------------------------------------
+Identical LOO protocol. Additive model = 6 parameters; interaction model = 16.
+
+  target    additive   + all 10   delta
+  sweet        9.965     13.857   +3.893   WORSE (+39%)
+  bitter       1.256      1.424   +0.167   WORSE
+  salty       12.021     12.792   +0.772   WORSE
+  umami        8.365      8.847   +0.482   WORSE
+  sour         9.820      8.853   -0.967   better
+
+4 of 5 attributes get worse.
+
+WHY: the interaction model is strictly more powerful -- set all ten extra
+coefficients to zero and it reproduces the additive model exactly. So in-sample
+it can never lose. Out-of-sample it loses badly, which is the definition of
+overfitting: 16 parameters on 70 recipes.
+
+--------------------------------------------------------------------------------
+3.4  COEFFICIENT STABILITY -- THE MECHANISM OF THE OVERFIT
+--------------------------------------------------------------------------------
+ADDITIVE MODEL, SWEETNESS, fit on all 70:
+  intercept  +17.743      LOO range across 70 refits: 0.83
+  sweet      +15.737      LOO range: 1.98     <- 8x larger than its own wobble
+  bitter      -3.383      LOO range: 1.71
+  salty       +0.872      LOO range: 1.38
+  umami       -2.851      LOO range: 1.43
+  sour        +1.028      LOO range: 0.82
+
+INTERACTION COEFFICIENTS, fit on all 70 (16-parameter model)
+  term            sweet   bitter    salty    umami     sour
+  sweetxbitter    -3.34    +0.05    -0.92    -0.12    +0.41
+  sweetxsalty     +3.26    +0.96    -4.72    +0.57    +1.11
+  sweetxumami     -6.99    -1.29    +4.03    -0.28    +5.88
+  sweetxsour      -0.25    +0.21    -1.87    -0.87    -7.78
+  bitterxsalty    -4.88    +0.07    +1.76    +1.76    +3.29
+  bitterxumami    +4.91    -0.54    -3.96    -1.93    -1.62
+  bitterxsour     -1.47    +0.14    +1.09    -1.37    +0.85
+  saltyxumami     +1.99    +0.09    -2.07    +0.37    +0.54
+  saltyxsour      -0.64    -0.02    -2.08    -4.58    -1.28
+  umamixsour      +1.40    +0.75    -0.35    +3.12    +1.19
+
+  Note the reviewer's two testable mechanisms:
+    sweet x bitter predicting BITTERNESS = +0.05   (essentially zero)
+    salty x umami  predicting UMAMI      = +0.37   (essentially zero)
+  on a scale where main effects run to 15.
+
+RANGE EACH COEFFICIENT TRAVELS ACROSS THE 70 LOO REFITS
+  term            sweet   bitter    salty    umami     sour
+  sweetxbitter     2.15     0.48     1.55     0.94     0.91
+  sweetxsalty      8.64     0.90     4.89     3.46     3.50
+  sweetxumami     10.23     0.98     3.73     1.99     3.86
+  sweetxsour       4.33     0.40     3.60     1.55     6.57
+  bitterxsalty     8.04     0.42     2.96     1.26     2.32
+  bitterxumami     8.70     0.50     2.56     0.98     1.98
+  bitterxsour     11.95     0.58     4.20     0.82     3.87
+  saltyxumami      1.85     0.25     1.72     1.51     0.93
+  saltyxsour       6.65     0.75     7.72     3.85     4.57
+  umamixsour       7.03     0.58     3.11     1.67     3.62
+
+  Example: bitterxsour predicting sweetness is -1.47 but travels across a range
+  of 11.95 depending on which single recipe is left out -- eight times smaller
+  than its own wobble.
+
+  ACROSS ALL 50 INTERACTION COEFFICIENTS, 33 ARE SMALLER IN MAGNITUDE THAN THE
+  RANGE THEY TRAVEL. Two-thirds are indistinguishable from artifacts of which
+  recipes happened to be in the training set.
+
+--------------------------------------------------------------------------------
+3.5  DIRECT TESTS OF THE THREE NAMED MECHANISMS
+--------------------------------------------------------------------------------
+
+(a) SWEETNESS SUPPRESSING BITTERNESS
+    If true, recipes with more sugar should taste LESS bitter than predicted
+    -> negative correlation between bitterness residual and sugar.
+
+    resid_bitter vs sugar_frac                r = -0.004   p = 0.974
+    resid_bitter vs mixture sweetness         r = -0.008   p = 0.949
+    resid_bitter vs sugar, bitter > 0 (n=65)  r = -0.027   p = 0.830
+    residual sweet-bitter correlation         r = -0.007   p = 0.958
+    sweet x bitter term on bitter residual    r = +0.03
+    single-term LOO RMSE, bitterness       1.256 -> 1.343   (+0.087 WORSE)
+
+    VERDICT: no detectable signature.
+
+(b) FAT-ASSOCIATED SWEETNESS ENHANCEMENT
+    If true, fat-rich recipes should taste SWEETER than predicted
+    -> positive correlation between sweetness residual and fat.
+
+    resid_sweet vs fat_frac                   r = -0.214   p = 0.076
+    resid_sweet vs fat x mixture sweetness    r = -0.040   p = 0.743
+    resid_sweet vs fat x sugar_frac           r = -0.073   p = 0.546
+
+    VERDICT: not significant, and the point estimate runs OPPOSITE to the
+    hypothesis (fat-rich recipes are if anything over-predicted for sweetness).
+
+(c) SALTINESS-UMAMI ENHANCEMENT
+    resid_salty vs resid_umami                r = +0.616   p = 1.4e-08
+    salty x umami term vs resid_salty         r = -0.227   p = 0.058
+    salty x umami term vs resid_umami         r = -0.053   p = 0.662
+    single-term LOO RMSE, umami            8.365 -> 8.492   (+0.128 WORSE)
+
+    VERDICT: the residuals genuinely co-move, but the MULTIPLICATIVE term
+    predicts neither. Combined with the ingredient-level correlation (r = 0.511),
+    this is a SHARED-MAGNITUDE ERROR -- both attributes under-predicted in the
+    same recipes -- consistent with evaporative concentration and cooking
+    chemistry, not with receptor-level synergy.
+
+--------------------------------------------------------------------------------
+3.6  THE REVIEWER'S SPECIFIC ERROR PREDICTION
+--------------------------------------------------------------------------------
+"In recipes containing high levels of sugar and salt, this may lead to
+noticeable errors."
+
+STRATIFIED TEST -- recipes in the upper half of BOTH sugar and salt (n = 7)
+  total |residual|   flagged 33.38  vs  rest 29.60   Mann-Whitney p = 0.489
+
+  per attribute (|residual|, flagged vs rest):
+    sweet    8.21 vs 6.78   p = 0.129
+    bitter   0.31 vs 0.92   p = 0.011   (flagged recipes are BETTER predicted)
+    salty    9.17 vs 9.37   p = 0.701
+    umami    6.26 vs 6.43   p = 0.681
+    sour     9.43 vs 6.10   p = 0.325
+
+CONTINUOUS TEST -- |residual| against sugar, salt, and their product
+  attribute   vs sugar          vs salt           vs sugar x salt
+  sweet     +0.413 p<0.001    -0.310 p 0.009    +0.118 p 0.330
+  bitter    +0.500 p<0.001    -0.317 p 0.008    -0.220 p 0.067
+  salty     -0.197 p 0.102    +0.139 p 0.251    -0.046 p 0.705
+  umami     -0.195 p 0.105    +0.178 p 0.141    -0.035 p 0.774
+  sour      +0.045 p 0.711    -0.194 p 0.108    +0.196 p 0.104
+
+  The sugar x salt PRODUCT never predicts error on any attribute (all p >= 0.067).
+
+IS THE SUGAR-ERROR LINK AN INTERACTION? NO -- IT IS MAGNITUDE SCALING
+  sweet:  |resid| vs measured level      r = +0.629  p < 0.0001
+          |resid| vs predicted level     r = +0.398  p = 0.0006
+          partial |resid| ~ sugar, controlling for level:
+                                         r = -0.199  p = 0.099   -> VANISHES
+  bitter: |resid| vs measured level      r = +0.786  p < 0.0001
+          |resid| vs predicted level     r = +0.539  p < 0.0001
+          partial |resid| ~ sugar, controlling for level:
+                                         r = +0.233  p = 0.052   -> BORDERLINE
+
+  Bigger values produce bigger absolute errors. Once the level is controlled for,
+  sugar content adds nothing. This is heteroscedasticity, not cross-modality.
+
+--------------------------------------------------------------------------------
+3.7  ONE TERM AT A TIME (the fair version of the reviewer's request)
+--------------------------------------------------------------------------------
+Adding all ten terms could be dismissed as a parameter-count problem. So each
+term was also added ALONE -- one extra parameter -- under the same LOO protocol.
+
+  target   term added      additive   +1 term            + all 10
+  sour     sweetxsour         9.820     8.836 (-0.983)     8.853 (-0.967)
+  sweet    bitterxumami       9.965     9.151 (-0.814)    13.857 (+3.893)
+  bitter   sweetxbitter       1.256     1.343 (+0.087)     1.424 (+0.167)
+  umami    saltyxumami        8.365     8.492 (+0.128)     8.847 (+0.482)
+
+  KEY POINT: bitterxumami helps by 0.81 alone but hurts by 3.89 when buried
+  among ten terms. The term was fine; the company it kept was not.
+
+  KEY POINT 2: the reviewer's two testable mechanisms still make prediction
+  WORSE even given their best possible shot as the sole added parameter.
+
+--------------------------------------------------------------------------------
+3.8  NESTED SELECTION -- NO LEAKAGE
+--------------------------------------------------------------------------------
+Choosing a term by looking at the LOO results and then reporting the LOO
+improvement is grading against the answer key. The honest protocol selects the
+term inside each fold using ONLY the 69 training recipes, then predicts the
+held-out recipe. "None" is an allowed choice.
+
+  target   additive  cherry-picked  NESTED-HONEST   delta   term chosen (of 70)
+  sweet       9.965         9.151         9.611    -0.353   bitterxumami (69)
+  salty      12.021        11.430        11.430    -0.591   bitterxumami (70)
+  sour        9.820         8.836         8.836    -0.983   sweetxsour (70)
+  bitter      1.256         1.261         1.312    +0.056   NONE (63)
+  umami       8.365         8.296         8.542    +0.177   sweetxumami (58),
+                                                            saltyxsour (12)
+
+  3 of 5 improve under a protocol with no selection leakage.
+
+  Evidence the method is behaving correctly:
+   - For salty and sour the nested and cherry-picked numbers are IDENTICAL,
+     because the same term was chosen in all 70 folds -- selection bias was zero.
+   - For bitterness the selector DECLINES in 63 of 70 folds, correctly
+     identifying that there is nothing to add.
+   - Umami is the one that got worse, and it is the one where selection was
+     unstable (58 folds vs 12). Disagreement across folds -> no real effect.
+   - Sweetness shows the leakage premium: cherry-picked 9.151 vs honest 9.611.
+     The real gain is 0.353, not 0.814.
+
+--------------------------------------------------------------------------------
+3.9  ARE THE SURVIVORS REAL INTERACTIONS, OR PROXIES?
+--------------------------------------------------------------------------------
+WHAT bitterxumami ACTUALLY TRACKS (correlation with existing chemistry features)
+  allium_frac          r = +0.357   p = 0.0024
+  sugar_frac           r = -0.356   p = 0.0025
+  maillard_potential   r = -0.294   p = 0.0135
+  protein_frac         r = -0.244   p = 0.0417
+  fermented_frac       r = -0.151   p = 0.212
+  salt_frac            r = +0.033   p = 0.783
+  water_frac           r = -0.010   p = 0.933
+  conc_factor          r = +0.009   p = 0.939
+  sweet-dominant flag  r = -0.157   p = 0.195
+
+  -> allium-rich, low-sugar: savoury cooked dishes.
+
+WHAT sweetxsour TRACKS
+  sugar_frac           r = -0.440   p = 0.0001
+  maillard_potential   r = -0.408   p = 0.0005
+
+SURVIVAL UNDER CONTROLS (LOO RMSE; "arch" = binary sweet-dominant-dish flag,
+derived from mixture features only, 10/70 recipes)
+
+  target  A:additive  B:A+term  gain  | C:A+chem  D:C+term  gain  | E:A+arch  F:E+term  gain
+  sweet       9.965     9.151  -0.814 |  12.412    12.231  -0.181 |   8.975    8.631  -0.344
+  salty      12.021    11.430  -0.591 |  11.222    10.249  -0.972 |  11.543   11.260  -0.282
+  sour        9.820     8.836  -0.983 |   8.290     8.868  +0.578 |   9.939    8.958  -0.981
+  (term = bitterxumami for sweet and salty; sweetxsour for sour)
+
+  SOUR -- DIES. The chemistry features alone reach 8.290, BETTER than the
+    interaction term's 8.836, and adding the term on top makes it worse
+    (+0.578). It was a poor proxy for sugar_frac.
+
+  SWEET -- MOSTLY DIES. A one-bit sweet-dominant-dish flag alone reaches 8.975,
+    better than the interaction term's 9.151. Residual gain falls to 0.18-0.34.
+    (Caveat: the chemistry column overfits sweetness badly -- 12.412 vs 9.965 --
+    so read -0.181 loosely; the archetype comparison is the trustworthy one.)
+
+  SALTY -- SURVIVES. The gain GROWS when chemistry is controlled (-0.972),
+    meaning the term adds something the chemistry features do not have.
+
+--------------------------------------------------------------------------------
+3.10  FINAL CHECK ON THE ONE SURVIVOR
+--------------------------------------------------------------------------------
+Nested selection, chemistry block always in the model, target = saltiness:
+
+  additive only                     12.021
+  additive + chemistry              11.222
+  + nested-selected term            10.249
+  selection: bitterxumami in 70 of 70 folds
+
+  15% RMSE improvement over the additive model, with ZERO selection bias
+  (nested equals cherry-picked exactly, because every fold agrees).
+
+
+================================================================================
+4. CONCLUSIONS
+================================================================================
+
+1. The additive model already absorbs nearly all recipe-level taste correlation.
+   Sweet-bitter goes from +0.363 in measured recipes to -0.007 in residuals.
+   Apparent taste correlation is inherited from ingredient co-occurrence and
+   culinary archetype, not from perceptual interaction.
+
+2. There is essentially no interaction structure left to find. 2 of 50 tests
+   survive FDR; max |r| = 0.437; neither survivor matches a described mechanism.
+
+3. NONE of the reviewer's three named mechanisms leaves a detectable signature,
+   and the two that are testable make prediction WORSE even when added alone.
+
+4. The reviewer's error prediction fails. High-sugar/high-salt recipes show no
+   elevated error (p = 0.489), and the sugar x salt product never predicts error.
+   The apparent sugar-error link is heteroscedasticity and vanishes once the
+   measured level is controlled for.
+
+5. Ten interaction terms at once badly overfit at N = 70 (sweetness +39% RMSE).
+   Two-thirds of the fitted interaction coefficients are smaller than their own
+   fold-to-fold wobble.
+
+6. Selected honestly one at a time, three of five attributes improve -- but two
+   of those three collapse once controlled against chemistry features already in
+   the hybrid model. They were proxying sugar content.
+
+7. EXACTLY ONE effect survives every control: bitter x umami improves saltiness
+   prediction from 11.222 to 10.249 with chemistry included, selected in 70/70
+   folds. It correlates with allium content (+0.357) and inversely with sugar
+   (-0.356), so it behaves as a NONLINEAR COMPOSITION/ARCHETYPE TERM for savoury
+   cooked dishes, NOT as a cross-modal perceptual interaction. It should be
+   reported as exploratory: it emerged from a search over 10 terms x 5 targets
+   with several control sets, on a single dataset of 70 recipes.
+
+8. Power caveat: at N = 70 only |r| >~ 0.33 is detectable. Weaker interactions
+   cannot be excluded.
+
+
+================================================================================
+5. TEXT FOR THE RESPONSE LETTER
+================================================================================
+
+[Existing paragraph, unchanged:]
+
+  We agree that the independent taste-dimension formulation does not capture
+  cross-modal perceptual interactions. We revised the Methods to clarify that
+  the five taste dimensions are modeled independently as a first-order
+  formulation, and that cross-modal perceptual interactions are not included in
+  the HS/RV or hybrid models (Lines 87-91). We also expanded the Discussion
+  limitations to state that the model does not capture sweetness-mediated
+  bitterness suppression, saltiness-umami enhancement, or fat-associated
+  sweetness enhancement, which may contribute error in high-sugar, high-salt, or
+  high-fat recipes (Lines 341-344).
+
+[Addition -- three sentences:]
+
+  To substantiate this rather than assert it, we tested each mechanism directly
+  using leave-one-out residuals of the additive model (N = 70): the bitterness
+  residual is uncorrelated with recipe sugar mass fraction (r = -0.004,
+  p = 0.97) and with mixture sweetness (r = -0.008, p = 0.95), the sweetness
+  residual shows no fat-associated enhancement (r = -0.21, p = 0.08, opposite in
+  sign to the hypothesis), and the multiplicative salt x umami term predicts
+  neither the saltiness nor the umami residual (p = 0.06 and 0.66). The
+  reviewer's specific prediction is likewise not borne out: recipes in the upper
+  half of both sugar and salt mass fraction (n = 7) show no elevated error
+  (total |residual| 33.4 versus 29.6, Mann-Whitney p = 0.49), and adding all ten
+  pairwise interaction terms increases out-of-sample RMSE for four of five
+  attributes (sweetness 9.97 -> 13.86), reflecting their parameter cost at this
+  sample size. We note that at N = 70 these analyses resolve residual-interaction
+  correlations only down to |r| ~ 0.33 (80% power), so interactions of smaller
+  magnitude cannot be excluded.
+
+[OPTIONAL -- add if you prefer to volunteer the survivor rather than have a
+ reviewer find it later:]
+
+  Selected individually under nested cross-validation one term does improve
+  prediction -- bitter x umami on saltiness (11.22 -> 10.25 with the chemistry
+  features included, selected in 70/70 folds) -- but it correlates with allium
+  content (r = +0.36) and inversely with sugar (r = -0.36), indicating a
+  nonlinear composition effect rather than a cross-modal perceptual interaction.
+
+[OPTIONAL -- add if a reviewer presses on saltiness specifically:]
+
+  Saltiness and umami residuals do co-vary (r = 0.62, p = 1.4e-08), but the
+  multiplicative salt x umami term predicts neither residual (p = 0.06 and 0.66)
+  and the two attributes already correlate at the ingredient level (r = 0.51,
+  p = 5e-09), indicating a shared-magnitude error consistent with evaporative
+  concentration rather than receptor-level synergy.
+
+
+================================================================================
+6. REPRODUCIBILITY -- IMPORTANT
+================================================================================
+
+IN THE REPO AND REGENERATES:
+  python3 Lasso/src/interaction_plots.py    ->  results/interactions/
+    ingredient_sensory_profiles.png   115 ingredients x 5 tastes heatmap (Fig. R1)
+    sensory_interactions.pdf          panels A-E
+    ingredient_sensory_matrix.csv     per-ingredient scores + recipe counts
+    sensory_correlations.csv          sections 3.1 (30 rows)
+    interaction_tests.csv             section 3.2 (all 50 tests, r/p/q)
+    loo_interaction_comparison.csv    section 3.3
+    summary.txt                       text digest
+
+  Covers: sections 3.1 (correlations), 3.2 (50 tests), 3.3 (all-ten RMSE).
+
+NOT IN THE REPO -- run ad hoc, WILL NOT REGENERATE:
+  Section 3.4   coefficient stability
+  Section 3.5   the three mechanism tests (needs the fat proxy, which does not
+                exist in the current feature set)
+  Section 3.6   sugar/salt stratification and heteroscedasticity controls
+  Section 3.7   single-term tests
+  Section 3.8   nested selection
+  Section 3.9   chemistry and archetype controls
+  Section 3.10  final nested check
+
+  Any number from these sections that goes into the response letter is currently
+  uncited by runnable code. To fix, add them to Lasso/src/interaction_plots.py
+  with a mechanism_tests.csv export.
+
+CAVEAT ON THE BASELINE
+  The "additive" model throughout is an ordinary least-squares fit on the five
+  mixture features. It is NOT the Lasso, HS/RV, or hybrid model. Its RMSE values
+  (e.g. sweet 9.965) are internally consistent but do not correspond to any
+  number in the manuscript's results tables. Any caption or response text must
+  state what the baseline is.
+
+================================================================================

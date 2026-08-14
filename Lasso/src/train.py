@@ -20,7 +20,7 @@ import importlib.util
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.model_selection import LeaveOneOut
+from sklearn.model_selection import LeaveOneOut, KFold
 from sklearn.metrics import (
     r2_score, mean_squared_error, explained_variance_score
 )
@@ -244,6 +244,71 @@ def tune_best_alphas(X_std, Y, alphas):
         print(f"[+] Selected alpha for '{key}': {best:.5f}")
     return best_alphas
 
+def loo_predict_lasso(X_raw, y, alphas, inner_splits=5, seed=42, verbose_key=""):
+    """Strictly out-of-sample LOO predictions for one target.
+
+    For every held-out recipe the alpha is re-selected by an inner K-fold on the
+    remaining recipes, and both the feature scaler and the target centring are
+    fit on training rows only. Nothing derived from the held-out row enters the
+    model, so these predictions are directly comparable to the LOO-evaluated
+    HS/RV and Hybrid numbers.
+
+    The previous code path fit on all 70 recipes and predicted the same 70, so
+    the reported Lasso metrics were in-sample.
+    """
+    n = len(y)
+    preds = np.zeros(n, dtype=float)
+    outer = LeaveOneOut()
+
+    for fold, (tr, te) in enumerate(outer.split(X_raw)):
+        X_tr, y_tr = X_raw[tr], y[tr]
+
+        # ── inner loop: pick alpha using only the training rows ──
+        inner = KFold(n_splits=min(inner_splits, len(tr)), shuffle=True, random_state=seed)
+        errs = np.zeros(len(alphas), dtype=float)
+        for a_i, alpha in enumerate(alphas):
+            fold_err = []
+            for itr, ite in inner.split(X_tr):
+                mu, sd = X_tr[itr].mean(axis=0), X_tr[itr].std(axis=0)
+                sd = np.where(sd == 0, 1.0, sd)
+                y_mu = y_tr[itr].mean()
+                m = LassoRegressor(alpha=alpha, learning_rate=0.01, max_iter=1000,
+                                   tol=1e-6, verbose=False)
+                m.fit((X_tr[itr] - mu) / sd, y_tr[itr] - y_mu)
+                p = m.predict((X_tr[ite] - mu) / sd) + y_mu
+                fold_err.append(mean_squared_error(y_tr[ite], p))
+            errs[a_i] = np.mean(fold_err)
+        best_alpha = alphas[int(np.argmin(errs))]
+
+        # ── refit on the whole training fold, predict the held-out row ──
+        mu, sd = X_tr.mean(axis=0), X_tr.std(axis=0)
+        sd = np.where(sd == 0, 1.0, sd)
+        y_mu = y_tr.mean()
+        m = LassoRegressor(alpha=best_alpha, learning_rate=0.01, max_iter=1000,
+                           tol=1e-6, verbose=False)
+        m.fit((X_tr - mu) / sd, y_tr - y_mu)
+        preds[te] = m.predict((X_raw[te] - mu) / sd) + y_mu
+
+        if verbose_key and (fold + 1) % 20 == 0:
+            print(f"    [{verbose_key}] LOO fold {fold + 1}/{n}")
+
+    return preds
+
+
+def loo_predict_all(X_raw, Y, alphas):
+    """Run the nested-LOO evaluation for every sensory target."""
+    preds, actuals, labels = [], [], []
+    per_target = {}
+    for i, key in enumerate(SENSORY_ORDER):
+        print(f"[INFO] Nested LOO evaluation for '{key}' ...")
+        p = loo_predict_lasso(X_raw, Y[:, i], alphas, verbose_key=key)
+        per_target[key] = p
+        preds.extend(p.tolist())
+        actuals.extend(Y[:, i].tolist())
+        labels.extend([key] * len(p))
+    return np.array(preds), np.array(actuals), labels, per_target
+
+
 def train_final_models(X, Y, best_alphas):
     models = {}
     inmem_preds, inmem_actuals, inmem_labels = [], [], []
@@ -293,8 +358,7 @@ def update_data_predictions_from_matrix(recipes, pred_matrix, pred_file_path):
 
 
 def predict_recipes_table(
-    models,
-    X,
+    preds_by_target,
     recipe_names,
     raw_recipes,
     out_json,
@@ -304,6 +368,9 @@ def predict_recipes_table(
     """
     Creates a JSON list with one object per recipe containing pred, actual,
     and optional diff dicts for each sensory attribute.
+
+    `preds_by_target` maps each sensory key to the leave-one-out prediction
+    vector aligned with `recipe_names`.
     """
 
     def _safe_round(x):
@@ -319,10 +386,7 @@ def predict_recipes_table(
 
     name_to_idx = {nm: i for i, nm in enumerate(recipe_names)}
 
-    preds_by_target = {}
-    for key in SENSORY_ORDER:
-        m = models[key]
-        preds_by_target[key] = np.asarray(m.predict(X), dtype=float)
+    preds_by_target = {k: np.asarray(v, dtype=float) for k, v in preds_by_target.items()}
 
     raw_actuals = {}
     for r in raw_recipes:
@@ -509,6 +573,20 @@ def main():
     hs_pred_data = load_attr_from_py(HS_PRED_FILE, 'hs_predictions')
     rv_pred_data = load_attr_from_py(RV_PRED_FILE, 'rv_predictions')
 
+    # Rebuild the feature matrix straight from the raw recipes. This is the
+    # un-standardised Voigt vector; the LOO evaluation standardises inside each
+    # fold rather than relying on preprocess.py's whole-dataset scaling.
+    X_raw, raw_names = build_X_from_raw(raw_recipes)
+    Y_raw = build_Y_from_raw(raw_recipes)
+
+    # Guard against the column-order drift that previously transposed salty/sour
+    # between preprocess.py and this module.
+    assert np.allclose(Y_raw, Y), (
+        "Y_train.npy disagrees with build_Y_from_raw — sensory column order has "
+        "drifted between preprocess.py and plot_config.SENSORY_ORDER. "
+        "Re-run preprocess.py."
+    )
+
     print("[*] Standardizing X for alpha tuning...")
     X_std, x_mean, x_scale = standardize_fit(X)
     np.save(os.path.join(PROC_DIR, "x_scaler_mean.npy"), x_mean)
@@ -519,20 +597,29 @@ def main():
     alphas = np.logspace(-4, 0.5, 30)
     best_alphas = tune_best_alphas(X_std, Y, alphas)
 
-    # Train final models on raw X so predictions match HS/RV scale
+    # Deployable models, fit on the full dataset. These are pickled for reuse but
+    # are NOT the source of the reported metrics — see the nested LOO below.
     print("[*] Training final models...")
-    models, lasso_preds_all, lasso_actuals_all, lasso_labels_all = train_final_models(X, Y, best_alphas)
+    models, _insample_p, _insample_a, _insample_l = train_final_models(X, Y, best_alphas)
 
     # Save models
     with open(MODEL_FILE, 'wb') as f:
         pickle.dump(models, f)
     print(f"[+] Models saved to: {MODEL_FILE}")
 
+    # ── Out-of-sample evaluation (nested LOO) ──
+    # Every reported Lasso number below comes from these predictions, so they sit
+    # on the same footing as the LOO-calibrated HS/RV predictions.
+    print("[*] Nested LOO evaluation (this is the reported Lasso performance)...")
+    lasso_preds_all, lasso_actuals_all, lasso_labels_all, lasso_by_target = \
+        loo_predict_all(X_raw, Y, alphas)
+
     # Per-recipe prediction table
     recipe_names = [r['recipe_name'] for r in raw_recipes]
+    assert recipe_names == raw_names, "Recipe order mismatch between X_raw and raw_recipes"
     OUT_JSON = os.path.join(MODELS_DIR, "per_recipe_lasso_predictions.json")
     _ = predict_recipes_table(
-        models=models, X=X, recipe_names=recipe_names,
+        preds_by_target=lasso_by_target, recipe_names=recipe_names,
         raw_recipes=raw_recipes, out_json=OUT_JSON,
     )
 
@@ -573,11 +660,10 @@ def main():
     dfs.append(evaluate_and_save("Lasso", lasso_preds_all, lasso_actuals_all, lasso_labels_all, METRICS_DIR))
     save_combined_tables(dfs, METRICS_DIR)
 
-    # Write Lasso predictions back to data_predictions.py
-    print("[*] Updating data_predictions.py with Lasso predictions...")
-    lasso_preds_matrix = np.column_stack([
-        models[k].predict(X) for k in SENSORY_ORDER
-    ])
+    # Write Lasso predictions back to data_predictions.py (leave-one-out, so they
+    # are comparable to the LOO-calibrated HS/RV entries in the sibling files)
+    print("[*] Updating data_predictions.py with Lasso LOO predictions...")
+    lasso_preds_matrix = np.column_stack([lasso_by_target[k] for k in SENSORY_ORDER])
     update_data_predictions_from_matrix(raw_recipes, lasso_preds_matrix, PRED_FILE)
 
     print("[+] Done.")

@@ -108,19 +108,21 @@ Runs three case studies (pea soup salt reduction, chocolate spread sugar reducti
 │       ├── preprocess.py
 │       ├── lasso.py              # Custom Lasso via proximal gradient descent
 │       ├── data_plots.py         # EDA plots
-│       ├── train.py              # LOO training, metrics, evaluation plots
+│       ├── train.py              # Nested-LOO evaluation, metrics, plots
 │       ├── run_all.py            # Pipeline orchestrator
-│       ├── hybrid_analysis.py    # Hybrid model (imported by composite_figure.py)
 │       └── composite_figure.py   # 4-method composite figure
 │
 ├── Hybrid/src/
-│   ├── hybrid_analysis.py        # Hybrid model + Tables 1 & 2
+│   ├── hybrid_analysis.py        # Hybrid model + Tables 1 & 2 (single source of truth)
 │   ├── hybrid_plots.py           # Coverage, MAE, bias, boxplot
 │   ├── overview_panel.py         # Overview panel figure
 │   └── publication_figures.py    # Figures 1–3
 │
 ├── Inverse/src/
 │   └── inverse_design.py         # Inverse design via differential evolution
+│
+├── tests/
+│   └── test_pipeline_invariants.py  # Regression tests (python3 -m pytest tests/)
 │
 └── results/                      # All generated outputs (gitignored)
     ├── plots/                    # Scatter plots, composite figure

@@ -7,9 +7,11 @@ Composite figure: Panels A–E
   Row 3: RMSE grouped boxplot spanning full width — E
          (4 boxes per sensory attribute: HS, RV, Lasso, Hybrid)
 
+All four panels are evaluated leave-one-out. Lasso (C) and Hybrid (D) are
+computed here directly from the raw recipes using the same LOO protocol, so
+they are mutually comparable and match the corresponding rows of Table 2.
+
 Prerequisites:
-  Run python3 Lasso/src/train.py first to populate
-  data/data_predictions.py with Lasso predictions.
   Run python3 HS_RV/src/compute_bounds.py first to populate
   data/hs_predictions.py and data/rv_predictions.py.
 
@@ -17,7 +19,6 @@ Usage (from repo root):
   python3 Lasso/src/composite_figure.py
 """
 
-import csv
 import importlib.util
 import os
 import sys
@@ -35,6 +36,11 @@ _HERE           = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _HERE)
 
 PROJECT_ROOT    = os.path.abspath(os.path.join(_HERE, os.pardir))
+REPO_ROOT       = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir))
+# hybrid_analysis lives in Hybrid/src and is the single source of truth for the
+# hybrid model. Importing it from there (rather than keeping a second copy under
+# Lasso/src) keeps the chemistry features from drifting between the two.
+sys.path.insert(0, os.path.join(REPO_ROOT, "Hybrid", "src"))
 SHARED_DATA_DIR = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir, "data"))
 PLOTS_DIR       = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir, "results", "plots"))
 os.makedirs(PLOTS_DIR, exist_ok=True)
@@ -42,7 +48,6 @@ os.makedirs(PLOTS_DIR, exist_ok=True)
 RESULTS_DIR     = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir, "results"))
 HS_PRED_FILE    = os.path.join(SHARED_DATA_DIR, "hs_predictions.py")
 RV_PRED_FILE    = os.path.join(SHARED_DATA_DIR, "rv_predictions.py")
-LASSO_CSV_FILE  = os.path.join(RESULTS_DIR, "models", "real_vs_predicted.csv")
 RAW_RECIPES_FILE = os.path.join(SHARED_DATA_DIR, "raw_recipes.py")
 OUTPUT_FILE     = os.path.join(PLOTS_DIR, "composite_figure.png")
 
@@ -121,51 +126,52 @@ def _extract(pred_dict, method_key):
 
 # ── Data loading ────────────────────────────────────────────────────────
 
-def _load_lasso_csv(csv_path):
-    """Load Lasso results from real_vs_predicted.csv (label, actual, predicted)."""
-    preds, actuals, labels = [], [], []
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            lbl = row["label"].strip()
-            if lbl in SENSORY_ORDER:
-                actuals.append(float(row["actual"]))
-                preds.append(float(row["predicted"]))
-                labels.append(lbl)
-    return (
-        np.array(preds,   dtype=float),
-        np.array(actuals, dtype=float),
-        np.array(labels),
-    )
+CHEM_COLS = [
+    "protein_frac", "sugar_frac", "maillard_potential", "salt_frac",
+    "water_frac", "conc_factor", "allium_frac", "fermented_frac",
+]
+HYBRID_ALPHAS = np.logspace(-3, 1, 30)
 
 
-def _load_hybrid(raw_recipes_path):
-    """Compute Hybrid (HS bounds + chemistry features) LOO predictions."""
-    print("[*] Computing Hybrid LOO predictions (this may take a moment)...")
+def _load_loo_models(raw_recipes_path):
+    """Compute leave-one-out predictions for both Lasso (5D) and Hybrid.
+
+    Both models are evaluated with the identical protocol used by
+    Hybrid/src/hybrid_analysis.py (outer LOO, inner 5-fold LassoCV, features
+    standardised inside each fold), so these panels are directly comparable to
+    each other and reproduce the Lasso-5D and Hybrid rows of Table 2.
+
+    Previously the Lasso panel was read from train.py's real_vs_predicted.csv,
+    which holds *in-sample* fits — those were not comparable to the LOO hybrid
+    panel sitting beside them.
+    """
+    print("[*] Computing Lasso-5D and Hybrid LOO predictions (this may take a moment)...")
     raw_recipes = _load_attr(raw_recipes_path, "raw_recipes")
     df, _ = build_analysis_df(raw_recipes)
 
-    chem_cols = [
-        "protein_frac", "sugar_frac", "maillard_potential", "salt_frac",
-        "water_frac", "conc_factor", "allium_frac", "fermented_frac",
-    ]
-    alphas = np.logspace(-3, 1, 30)
+    # Lasso 5D: the five RV/Voigt-weighted taste scores, same design matrix for
+    # every target (matches the 'Lasso 5D' row of Table 2).
+    X_lasso = df[[f"{t}_voigt" for t in _HYBRID_TASTES]].values.astype(float)
 
-    preds, actuals, labels = [], [], []
+    lasso, hybrid = ([], [], []), ([], [], [])
     for t in _HYBRID_TASTES:
         actual = df[f"{t}_actual"].values
-        feat   = [f"{t}_hs_mid", f"{t}_voigt"] + chem_cols
-        X      = df[feat].values.astype(float)
-        pred   = loo_evaluate(X, actual, alphas)
-        preds.extend(pred.tolist())
-        actuals.extend(actual.tolist())
-        labels.extend([t] * len(actual))
+        X_hyb = df[[f"{t}_hs_mid", f"{t}_voigt"] + CHEM_COLS].values.astype(float)
 
-    return (
-        np.array(preds,   dtype=float),
-        np.array(actuals, dtype=float),
-        np.array(labels),
-    )
+        for store, X in ((lasso, X_lasso), (hybrid, X_hyb)):
+            pred = loo_evaluate(X, actual, HYBRID_ALPHAS)
+            store[0].extend(pred.tolist())
+            store[1].extend(actual.tolist())
+            store[2].extend([t] * len(actual))
+
+    def _pack(store):
+        return (
+            np.array(store[0], dtype=float),
+            np.array(store[1], dtype=float),
+            np.array(store[2]),
+        )
+
+    return _pack(lasso), _pack(hybrid)
 
 
 def load_all():
@@ -175,14 +181,9 @@ def load_all():
     hs_p, hs_a, hs_l = _extract(hs_data, "HS prediction")
     rv_p, rv_a, rv_l = _extract(rv_data, "RV prediction")
 
-    if not os.path.exists(LASSO_CSV_FILE):
-        raise RuntimeError(
-            f"Lasso predictions not found at:\n  {LASSO_CSV_FILE}\n"
-            "Run:  python3 Lasso/src/train.py  first."
-        )
-    lasso_p, lasso_a, lasso_l = _load_lasso_csv(LASSO_CSV_FILE)
-
-    hybrid_p, hybrid_a, hybrid_l = _load_hybrid(RAW_RECIPES_FILE)
+    (lasso_p, lasso_a, lasso_l), (hybrid_p, hybrid_a, hybrid_l) = _load_loo_models(
+        RAW_RECIPES_FILE
+    )
 
     return {
         "HS":     (hs_p,     hs_a,     hs_l),

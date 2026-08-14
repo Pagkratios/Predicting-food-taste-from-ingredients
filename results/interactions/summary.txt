@@ -1,0 +1,17 @@
+Cross-modal interaction diagnostics
+==========================================
+Recipes: 70   Unique ingredients: 115
+
+Residual x interaction-term tests (50 tests, Pearson):
+  nominal p < 0.05: 7
+  Benjamini-Hochberg q < 0.05: 2
+  max |r|: 0.437
+
+Leave-one-out RMSE, additive model vs. + 10 pairwise interaction terms:
+  sweet     9.965 ->  13.857   delta = +3.893
+  bitter    1.256 ->   1.424   delta = +0.167
+  salty    12.021 ->  12.792   delta = +0.772
+  umami     8.365 ->   8.847   delta = +0.482
+  sour      9.820 ->   8.853   delta = -0.967
+
+Interaction terms increased out-of-sample RMSE for 4/5 attributes (sweet, bitter, salty, umami).

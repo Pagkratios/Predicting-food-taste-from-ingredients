@@ -27,6 +27,7 @@ jobs:
         run: |
           python -m pip install --upgrade "pip<25"
           python -m pip install -r Lasso/requirements.txt
+          python -m pip install pytest
 
       - name: Prepare matplotlib cache
         run: mkdir -p "$MPLCONFIGDIR"
@@ -34,8 +35,17 @@ jobs:
       - name: Run preprocess
         run: python Lasso/src/preprocess.py
 
+      - name: Compute HS/RV bounds
+        run: python HS_RV/src/compute_bounds.py
+
       - name: Run data plots
         run: python Lasso/src/data_plots.py
 
+      - name: Run inverse design
+        run: python Inverse/src/inverse_design.py
+
       - name: Run training
         run: python Lasso/src/train.py
+
+      - name: Regression tests
+        run: python -m pytest tests/ -v

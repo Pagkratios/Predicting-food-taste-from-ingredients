@@ -58,7 +58,10 @@ def chemistry_features(recipe):
     allium = frac_match(ings, w_list, ALLIUM_PAT)
     ferment = frac_match(ings, w_list, FERMENT_PAT)
     maillard = prot * sugar
-    conc = 1.0 / (1.0 - water) if water < 0.9 else 1.0
+    # Evaporative concentration factor. Saturated at water=0.9 (conc=10) so the
+    # feature stays monotone in water fraction; the previous `else 1.0` branch
+    # mapped the most water-rich recipes to the *smallest* concentration factor.
+    conc = 1.0 / (1.0 - min(water, 0.9))
 
     return {
         'protein_frac': prot, 'sugar_frac': sugar,

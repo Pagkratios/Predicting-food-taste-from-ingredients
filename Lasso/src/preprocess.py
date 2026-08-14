@@ -5,12 +5,16 @@ import importlib.util
 import numpy as np
 from sklearn.preprocessing import StandardScaler
 from env_config import get_raw_recipes_path
+from plot_config import SENSORY_ORDER, ALIASES
 
 # --- Reproducibility ---
 SEED = 42
 np.random.seed(SEED)
 
-SENSORY_KEYS = ['sweet', 'bitter', 'sour', 'umami', 'salty']
+# Column order for X_train.npy / Y_train.npy. This MUST stay identical to the
+# order train.py uses to index those arrays, so it is sourced from the single
+# shared definition in plot_config rather than redeclared here.
+SENSORY_KEYS = list(SENSORY_ORDER)
 
 # Paths
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
@@ -41,14 +45,15 @@ def compute_input_vector(ingredients):
     vec = np.zeros(len(SENSORY_KEYS), dtype=float)
     for ing in ingredients:
         w = ing['weight']
-        scores = np.array([ing['sensory_scores'][k] for k in SENSORY_KEYS], dtype=float)
+        s = ing['sensory_scores']
+        scores = np.array([float(s[ALIASES.get(k, k)]) for k in SENSORY_KEYS], dtype=float)
         vec += w * scores
     return vec
 
 
 def compute_target_vector(recipe_scores):
     """Convert the recipe's true sensory scores into a vector."""
-    return np.array([recipe_scores[k] for k in SENSORY_KEYS], dtype=float)
+    return np.array([float(recipe_scores[ALIASES.get(k, k)]) for k in SENSORY_KEYS], dtype=float)
 
 
 def standardize_features(X):

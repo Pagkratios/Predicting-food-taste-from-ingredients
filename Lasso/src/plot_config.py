@@ -108,6 +108,8 @@ RCPARAMS = {
     "grid.color":         "#CCCCCC",
     "mathtext.fontset":   "cm",
     "figure.constrained_layout.use": True,
+    "pdf.fonttype":       42,   # embed TrueType, not Type 3 (journal requirement)
+    "ps.fonttype":        42,
 }
 
 

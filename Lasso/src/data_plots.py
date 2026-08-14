@@ -28,7 +28,6 @@ from collections import defaultdict
 import matplotlib.lines as mlines
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.cm import get_cmap
 from scipy.stats import (
     gaussian_kde, ks_2samp, mannwhitneyu, norm, ttest_ind,
 )
@@ -242,7 +241,7 @@ def plot_ingredient_usage_pie_v2(raw_recipes, outdir, threshold=3):
     counts_only = [c for _, c in items]
     pct = [100.0 * c / total_recipes for c in counts_only]
 
-    cmap = get_cmap("tab20")
+    cmap = plt.get_cmap("tab20")
     colors = [cmap(i % 20) for i in range(len(labels))]
 
     fig, ax = setup_figure(size=(7.0, 5.8))

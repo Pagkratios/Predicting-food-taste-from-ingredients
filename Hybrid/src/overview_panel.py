@@ -80,8 +80,11 @@ def main():
         all_a.extend(df[f'{t}_actual'].values.tolist())
         all_l.extend([t] * n)
 
-    all_p = np.clip(all_p, 0, 100)
-    all_a = np.clip(all_a, 0, 100)
+    # Do NOT clip before scoring. Clipping negative predictions to 0 removes
+    # real error and inflates both statistics, which made this panel disagree
+    # with Figure 4D and with Tables 1-2 (all of which score unclipped).
+    all_p = np.asarray(all_p, dtype=float)
+    all_a = np.asarray(all_a, dtype=float)
     pcc, _ = pearsonr(all_p, all_a)
     r2 = r2_score(all_a, all_p)
 

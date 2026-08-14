@@ -1,0 +1,6 @@
+target,rmse_additive,rmse_with_interactions,delta_rmse
+sweet,9.9647,13.8573,3.8926
+bitter,1.2564,1.4236,0.1672
+salty,12.0206,12.7923,0.7716
+umami,8.3647,8.8467,0.4821
+sour,9.8199,8.8527,-0.9672

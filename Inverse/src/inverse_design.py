@@ -7,7 +7,7 @@ Run from repo root:
 """
 import importlib.util, os, sys, json, warnings
 import numpy as np
-from scipy.optimize import differential_evolution
+from scipy.optimize import differential_evolution, LinearConstraint
 warnings.filterwarnings('ignore')
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
@@ -55,15 +55,44 @@ def run_case(raw_recipes, rp_id, target_changes, weights, bounds_dict, case_name
                 lo, hi = max(0.001, cl), ch
         bds.append((lo, hi))
 
+    # The composition must be feasible: the box [lo, hi] has to contain a point
+    # summing to 1, otherwise the constraint below can never be satisfied.
+    lo_sum = sum(b[0] for b in bds)
+    hi_sum = sum(b[1] for b in bds)
+    if not (lo_sum <= 1.0 <= hi_sum):
+        raise ValueError(
+            f"{case_name}: infeasible bounds — mass fractions can sum to "
+            f"[{lo_sum:.3f}, {hi_sum:.3f}], which does not contain 1.0"
+        )
+
     def objective(v):
-        vn = v / v.sum()
-        p = np.array([hs_mid(T_mat[:, j], vn) for j in range(5)])
+        p = np.array([hs_mid(T_mat[:, j], v) for j in range(5)])
         return np.sum(W * np.abs(target - p) / np.maximum(np.abs(p), 0.01))
 
+    # Pin sum(v) == 1 as an explicit constraint instead of renormalising inside
+    # the objective. Renormalising made the box bounds meaningless: a candidate
+    # with sugar=0.30 and sum(v)=0.75 became a 0.40 mass fraction after scaling,
+    # silently breaching a 0.35 cap. With the simplex enforced here, the bounds
+    # are bounds on the actual mass fractions.
+    simplex = LinearConstraint(np.ones((1, n)), 1.0, 1.0)
+
     result = differential_evolution(objective, bds, maxiter=1000, popsize=20,
-                                     seed=42, tol=1e-8, mutation=(0.5, 1.0),
-                                     recombination=0.8, strategy='best1bin')
-    v_opt = result.x / result.x.sum()
+                                    seed=42, tol=1e-8, mutation=(0.5, 1.0),
+                                    recombination=0.8, strategy='best1bin',
+                                    constraints=(simplex,))
+    v_opt = result.x
+
+    # Verify the delivered solution really is a valid, in-bounds composition.
+    lo_arr = np.array([b[0] for b in bds])
+    hi_arr = np.array([b[1] for b in bds])
+    sum_err = abs(v_opt.sum() - 1.0)
+    viol = np.maximum(lo_arr - v_opt, 0) + np.maximum(v_opt - hi_arr, 0)
+    if sum_err > 1e-6 or viol.max() > 1e-6:
+        raise RuntimeError(
+            f"{case_name}: optimiser returned an infeasible composition "
+            f"(|sum-1|={sum_err:.2e}, max bound violation={viol.max():.2e})"
+        )
+
     opt_profile = np.array([hs_mid(T_mat[:, j], v_opt) for j in range(5)])
 
     print(f"\n{'=' * 65}")
@@ -87,8 +116,12 @@ def run_case(raw_recipes, rp_id, target_changes, weights, bounds_dict, case_name
 
     return {
         'case': case_name, 'recipe_id': rp_id,
+        'forward_model': 'HS midpoint',
+        'constraints': {'sum_to_one': True, 'max_bound_violation': float(viol.max())},
         'ingredients': [{'name': names[i], 'orig': float(v_orig[i]),
-                         'opt': float(v_opt[i])} for i in range(n)],
+                         'opt': float(v_opt[i]),
+                         'lo': float(lo_arr[i]), 'hi': float(hi_arr[i])}
+                        for i in range(n)],
         'profile_orig': {t: float(orig[j]) for j, t in enumerate(TASTES)},
         'profile_target': {t: float(target[j]) for j, t in enumerate(TASTES)},
         'profile_opt': {t: float(opt_profile[j]) for j, t in enumerate(TASTES)},
