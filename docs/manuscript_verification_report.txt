@@ -1,0 +1,492 @@
+================================================================================
+MANUSCRIPT REVISION — CODE VERIFICATION REPORT
+Repo: Predicting-food-taste-from-ingredients
+Branch: main   HEAD: 79dc650
+Date: 2026-07-27
+Environment: python3, sklearn 1.9.0, scipy 1.17.1, numpy 2.4.6
+================================================================================
+
+SCOPE / METHOD
+--------------
+Read-only investigation. No project code was modified. The only script executed
+was a read-only reproduction copy in a scratchpad directory that writes no
+output files; it reproduced results/inverse/inverse_results.json exactly
+(differential_evolution seed=42).
+
+REPO LAYOUT NOTE
+----------------
+CLAUDE.md still documents Lasso_project/ and Bounds_project/. The actual
+directories are Lasso/, HS_RV/, Hybrid/, Inverse/. All paths below are real.
+
+
+================================================================================
+1. INVERSE DESIGN CONSTRAINTS
+================================================================================
+
+Script: Inverse/src/inverse_design.py
+
+Bounds construction: Inverse/src/inverse_design.py:47-56
+  Default per ingredient: (max(0.001, 0.5*v_orig), min(1.0, 1.5*v_orig))
+  Overridden by case-supplied case-insensitive substring patterns.
+
+LITERAL BOUNDS FROM main()
+--------------------------
+  RP14 pea soup              Inverse/src/inverse_design.py:106
+    Sugar : no sugar ingredient in this recipe; no bound
+    Salt  : ('Salt',  (0.001, 0.005))
+    (also 'Water': (0.2, 0.5))
+
+  RP55 chocolate-hazelnut    Inverse/src/inverse_design.py:113
+    Sugar : ('Sugar', (0.001, 0.35))
+    Salt  : no salt ingredient in this recipe; no override
+
+  RP68 ketchup               Inverse/src/inverse_design.py:120
+    Sugar : ('Sugar', (0.001, 0.10))
+    Salt  : no override -> default (0.010, 0.030)
+    (also 'Tomato': (0.45, 0.80))
+
+>>> THE KETCHUP SUGAR CAP IN CODE IS 0.10, NOT 0.05.
+    The manuscript's "capped at 5%" is not what the code did.
+
+OPTIMIZED SUGAR MASS FRACTIONS
+------------------------------
+Source: results/inverse/inverse_results.json (reproduced exactly)
+
+  Case                 raw result.x (what DE bounded)   reported 'opt' (stored)
+  RP55 chocolate       0.3439                            0.5096
+  RP68 ketchup         0.1000  (pinned at cap)           0.1180
+
+  Chocolate spread unrounded final value: 0.509628 normalized
+                                          0.343932 raw
+  Neither is 0.36. The manuscript's 35% cap is correct as a code bound but was
+  not honored in the reported output; 36% appears nowhere in the run.
+
+
+*** FLAG: THE BOUNDS ARE NOT ENFORCED ON THE REPORTED VALUES ***
+
+Inverse/src/inverse_design.py:63-66
+
+    result = differential_evolution(objective, bds, ...)
+    v_opt = result.x / result.x.sum()   # <-- renormalized AFTER bound enforcement
+
+differential_evolution respects bds on the raw vector, but the raw vector does
+not sum to 1. The reported/stored composition is the renormalized one, so the
+box constraints are undone.
+
+  Raw sums:  RP14 = 0.977459
+             RP55 = 0.674870
+             RP68 = 0.847414
+
+Reported fractions that EXCEED their own upper bound:
+
+  RP68 Sugar granulated     bound 0.10     reported 0.1180   (+18% over)
+  RP55 Sugar granulated     bound 0.35     reported 0.5096   (+46% over)
+  RP14 Carrots boiled avg   bound 0.0717   reported 0.0734
+  RP14 Leek boiled          bound 0.0534   reported 0.0546
+  RP14 Starch               bound 0.0333   reported 0.0341
+  RP55 Whey                 bound 0.01815  reported 0.018151
+
+RP55's reported sugar fraction (0.5096) is ABOVE its original (0.5035): the
+"sugar reduction" case study increased sugar.
+
+
+*** FLAG: THE CHOCOLATE CASE HAS NO SUGAR-REDUCTION OBJECTIVE ***
+
+Inverse/src/inverse_design.py:111 passes target_changes={}, so target == orig
+(see :42-45). The objective's optimum is the original profile, reached to
+fun = 2.02e-15. Nothing pushes sugar downward except the box bound, which is
+then undone by renormalization.
+
+
+FULL DE OUTPUT — RP14 PEA SOUP  (raw sum(x)=0.977459, fun=0.0568477)
+--------------------------------------------------------------------
+ingredient                             bnd_lo     raw_x    bnd_hi    v_orig   v_opt_norm    delta
+Water                                0.200000  0.452685  0.500000  0.394439    0.463125  +0.068685
+Peas frozen boiled                   0.122212  0.195124  0.366637  0.244424    0.199624  -0.044801
+Pork fillet raw                      0.043904  0.071352  0.131713  0.087809    0.072997  -0.014812
+Potatoes wo skins boiled average     0.026103  0.026103  0.078308  0.052205    0.026705  -0.025501
+Carrots boiled average               0.023902  0.071707  0.071707  0.047805    0.073360  +0.025556  <<VIOL
+Peas garden super fine tinned        0.020002  0.020002  0.060006  0.040004    0.020463  -0.019541
+Leek boiled                          0.017802  0.053405  0.053405  0.035604    0.054637  +0.019033  <<VIOL
+Onions raw                           0.012201  0.012201  0.036604  0.024402    0.012483  -0.011920
+Starch                               0.011101  0.033303  0.033303  0.022202    0.034071  +0.011869  <<VIOL
+Salt                                 0.001000  0.001000  0.005000  0.011101    0.001023  -0.010078
+Celery                               0.013901  0.034476  0.041704  0.027803    0.035271  +0.007468
+Oil sunflower seed                   0.006101  0.006101  0.018302  0.012201    0.006241  -0.005960
+
+FULL DE OUTPUT — RP55 CHOCOLATE SPREAD  (raw sum(x)=0.674870, fun=2.02e-15)
+---------------------------------------------------------------------------
+ingredient                             bnd_lo     raw_x    bnd_hi    v_orig   v_opt_norm    delta
+Sugar granulated                     0.001000  0.343932  0.350000  0.503500    0.509628  +0.006128  <<VIOL
+Oil sunflower seed                   0.092050  0.128041  0.276150  0.184100    0.189728  +0.005628
+Hazelnuts (walnuts proxy)            0.065000  0.085861  0.195000  0.130000    0.127226  -0.002774
+Milk semi-skimmed                    0.043500  0.046238  0.130500  0.087000    0.068514  -0.018486
+Cocoa powder                         0.037000  0.050378  0.111000  0.074000    0.074649  +0.000649
+Emulsifier/vanillin                  0.004650  0.008170  0.013950  0.009300    0.012105  +0.002805
+Whey                                 0.006050  0.012249  0.018150  0.012100    0.018151  +0.006051  <<VIOL
+
+FULL DE OUTPUT — RP68 KETCHUP  (raw sum(x)=0.847414, fun=0.0637133)
+--------------------------------------------------------------------
+ingredient                             bnd_lo     raw_x    bnd_hi    v_orig   v_opt_norm    delta
+Tomato average raw                   0.450000  0.616113  0.800000  0.600000    0.727051  +0.127051
+Sugar granulated                     0.001000  0.100000  0.100000  0.150000    0.118006  -0.031994  <<VIOL
+Vinegar                              0.050000  0.053208  0.150000  0.100000    0.062788  -0.037212
+Water                                0.040000  0.040000  0.120000  0.080000    0.047202  -0.032798
+Starch                               0.020000  0.020000  0.060000  0.040000    0.023601  -0.016399
+Salt                                 0.010000  0.013093  0.030000  0.020000    0.015451  -0.004549
+Spices/onion                         0.005000  0.005000  0.015000  0.010000    0.005900  -0.004100
+
+
+================================================================================
+2. TABLE 4 "UNCHANGED" VALUES
+================================================================================
+
+PER-DIMENSION WEIGHTS W_j
+-------------------------
+Dimension order is TASTES = ['sweet','sour','bitter','umami','salty']
+(Inverse/src/inverse_design.py:21). NOTE: this differs from SENSORY_ORDER in
+CLAUDE.md, which is ['sweet','bitter','salty','umami','sour'].
+
+  Case                      sweet  sour  bitter  umami  salty   Line
+  RP14 pea soup               1     1      1       2      3     :105
+  RP55 chocolate spread       3     1      1       1      1     :112
+  RP68 ketchup                2     1      1       3      1     :119
+
+>>> NO DIMENSION HAS ZERO WEIGHT IN ANY CASE.
+    The "unchanged because the dimension had zero weight" explanation is FALSE
+    for all four cells listed in the manuscript.
+
+UNROUNDED BEFORE -> AFTER FROM THE OPTIMIZER
+--------------------------------------------
+Source: results/inverse/inverse_results.json (profile_orig / profile_opt)
+
+  Case   Dim      Before            After             Delta
+  RP14   Umami    2.332938400041    2.332020131053    -9.183e-04
+  RP14   Sweet    3.534266034700    3.534266386886    +3.522e-07
+  RP55   Umami    0.611694291768    0.611694291768    -1.110e-16
+  RP68   Salt     1.802617729929    1.802617729722    -2.073e-10
+
+Full profiles (all five dims, all three cases):
+
+  RP14  sweet   orig= 3.534266034700  opt= 3.534266386886  diff= 3.522e-07
+        sour    orig= 1.497057191784  opt= 1.417587117317  diff=-7.947e-02
+        bitter  orig= 1.480315919639  opt= 1.480315913024  diff=-6.615e-09
+        umami   orig= 2.332938400041  opt= 2.332020131053  diff=-9.183e-04
+        salty   orig= 2.757137964307  opt= 1.957137963946  diff=-8.000e-01
+
+  RP55  sweet   orig=23.227844196252  opt=23.227844196252  diff= 3.553e-15
+        sour    orig= 0.565020530326  opt= 0.565020530326  diff= 0.000e+00
+        bitter  orig= 2.842616254366  opt= 2.842616254366  diff= 2.665e-15
+        umami   orig= 0.611694291768  opt= 0.611694291768  diff=-1.110e-16
+        salty   orig= 0.754083583144  opt= 0.754083583144  diff= 3.331e-16
+
+  RP68  sweet   orig= 9.417547960585  opt= 8.917547958083  diff=-5.000e-01
+        sour    orig= 9.124578022347  opt= 9.079371342585  diff=-4.521e-02
+        bitter  orig= 1.289151270579  opt= 1.369593324773  diff= 8.044e-02
+        umami   orig= 3.263763443737  opt= 4.063763443618  diff= 8.000e-01
+        salty   orig= 1.802617729929  opt= 1.802617729722  diff=-2.073e-10
+
+>>> THESE ARE HS-MIDPOINT VALUES, AN ORDER OF MAGNITUDE BELOW THE MANUSCRIPT'S
+    20.6 / 14.4 / 4.2 / 29.8.
+
+The inverse-design script only ever evaluates hs_mid
+(Inverse/src/inverse_design.py:23-27, :41, :67). It never calls the hybrid or
+Lasso model. Nothing in the repo reads results/inverse/inverse_results.json,
+and no file references a Table 4.
+
+>>> THERE IS NO CODE IN THIS REPO THAT MAPS AN OPTIMIZED COMPOSITION TO A
+    0-100-SCALE TASTE PREDICTION. The manuscript's post-optimization column
+    cannot have been generated by this repo.
+
+
+WHERE THE MANUSCRIPT'S NUMBERS ACTUALLY LIVE
+--------------------------------------------
+All are PRE-OPTIMIZATION, original-recipe quantities.
+
+  Manuscript cell        Best match                      Value    Source
+  Pea soup Umami 20.6    RP14 hybrid LOO prediction      20.867   Hybrid/src/hybrid_analysis.py:195
+  Pea soup Sweet 14.4    RP14 hybrid LOO prediction      14.548   Hybrid/src/hybrid_analysis.py:195
+  Chocolate Umami 4.2    RP55 hybrid LOO prediction       4.158   Hybrid/src/hybrid_analysis.py:195
+  Ketchup Salt 29.8      corpus-wide GT mean salt        29.8143  results/coverage/table1_coverage.csv
+                                                                  row 'Salt', col 'GT Mean'
+                                                                  (written at hybrid_analysis.py:204,233)
+  Ketchup Salt 29.8      -- or -- RP68 hybrid LOO pred   29.882   Hybrid/src/hybrid_analysis.py:195
+
+
+ON THE 29.8 SUSPICION
+---------------------
+The corpus mean salt across all 70 recipes is 29.8143 -- it rounds to 29.8
+exactly. RP68's own hybrid prediction is 29.882, which rounds to 29.9, not 29.8.
+At one decimal place the manuscript's figure matches the dataset-level
+aggregate and NOT the per-recipe prediction.
+
+This is not fully conclusive, and the reason matters: the two candidates are
+only 0.07 apart, because the hybrid model regresses toward the mean and RP68's
+actual salt (29.0) sits essentially at the corpus mean. The hybrid number also
+comes from LassoCV under sklearn 1.9.0 and could shift by a few tenths under the
+version originally run -- the same drift explains 20.867 vs 20.6 and 14.548 vs
+14.4.
+
+CONCLUSION: the evidence FAVORS a dataset-level leak but is not proof. What IS
+certain is that 29.8 is a pre-optimization quantity under either reading, and
+that no post-optimization salt prediction exists in the repo.
+
+Supporting corpus-wide means (all 70 recipes, data/raw_recipes.py):
+  sweet   n=70  mean = 17.7429
+  sour    n=70  mean = 11.4000
+  bitter  n=70  mean =  1.5714
+  umami   n=70  mean = 15.0286
+  salty   n=70  mean = 29.8143   <-- matches manuscript's ketchup "29.8"
+
+Per-recipe hybrid LOO predictions vs actuals for the three cases:
+  RP14  sweet  actual= 7.00  hs_mid= 3.5343  voigt= 6.8581  hybridLOO= 14.5481
+  RP14  sour   actual=10.00  hs_mid= 1.4971  voigt= 2.6849  hybridLOO=  9.8192
+  RP14  bitter actual= 2.00  hs_mid= 1.4803  voigt= 2.7639  hybridLOO=  1.0056
+  RP14  umami  actual=20.00  hs_mid= 2.3329  voigt= 3.9482  hybridLOO= 20.8671
+  RP14  salty  actual=44.00  hs_mid= 2.7571  voigt= 5.1727  hybridLOO= 30.1018
+  RP55  sweet  actual=63.00  hs_mid=23.2278  voigt=53.1252  hybridLOO= 80.6914
+  RP55  sour   actual= 1.00  hs_mid= 0.5650  voigt= 1.2136  hybridLOO=  2.1033
+  RP55  bitter actual= 3.00  hs_mid= 2.8426  voigt= 7.4053  hybridLOO=  4.5651
+  RP55  umami  actual= 3.00  hs_mid= 0.6117  voigt= 1.4816  hybridLOO=  4.1579
+  RP55  salty  actual= 9.00  hs_mid= 0.7541  voigt= 1.6502  hybridLOO=  8.4059
+  RP68  sweet  actual=28.00  hs_mid= 9.4175  voigt=21.5500  hybridLOO= 28.1260
+  RP68  sour   actual=42.00  hs_mid= 9.1246  voigt=20.5600  hybridLOO= 27.3468
+  RP68  bitter actual= 1.00  hs_mid= 1.2892  voigt= 2.5700  hybridLOO=  1.3569
+  RP68  umami  actual=22.00  hs_mid= 3.2638  voigt= 7.4500  hybridLOO= 16.9656
+  RP68  salty  actual=29.00  hs_mid= 1.8026  voigt= 4.1100  hybridLOO= 29.8820
+
+Ground-truth sensory scores (data/raw_recipes.py):
+  RP14 Soup legume based ready-made prepared
+       bitter=2.0  salty=44.0  sour=10.0  sweet=7.0   umami=20.0
+  RP55 Spread chocolate hazelnut
+       bitter=3.0  salty= 9.0  sour= 1.0  sweet=63.0  umami= 3.0
+  RP68 Ketchup tomato
+       bitter=1.0  salty=29.0  sour=42.0  sweet=28.0  umami=22.0
+
+
+================================================================================
+3. MASS FRACTION ARITHMETIC — PEA SOUP (RP14)
+================================================================================
+
+Source: results/inverse/inverse_results.json, case RP14 (reproduced exactly)
+
+  Ingredient                       Initial     Final       Delta
+  Pork fillet raw                  0.087809    0.072997    -0.014812
+  Oil sunflower seed               0.012201    0.006241    -0.005960
+  Peas frozen boiled               0.244424    0.199624    -0.044801
+  Peas garden super fine tinned    0.040004    0.020463    -0.019541
+  Peas, COMBINED                   0.284428    0.220087    -0.064341
+  Salt                             0.011101    0.001023    -0.010078
+
+
+*** FLAG: THIS IS A DIFFERENT PROBLEM FROM AN ARITHMETIC SLIP ***
+
+The manuscript's oil (1% -> 25%, delta +0.234) and peas (-> 2%, delta -0.226)
+are INTERNALLY nearly consistent: 1 + 23.4 ~= 24.4 and 24 - 22.6 ~= 1.4 are
+within rounding of the stated endpoints.
+
+But the code produces NEITHER value:
+  - Oil DECREASES, from 1.2201% to 0.6241%.
+  - Peas decrease from 24.4424% to 19.9624% (frozen) -- not to 2%.
+  - No ingredient in this run moves by more than +0.0687 (Water).
+
+The Table 4 row appears to describe a DIFFERENT optimization run entirely --
+one where oil was massively increased and peas massively cut. `git log` shows a
+single commit (79dc650) for both Inverse/src/inverse_design.py and
+results/inverse/inverse_results.json, so no earlier version exists in the repo
+that could have produced it.
+
+I cannot supply "consistent" numbers for the current manuscript text, because
+the run being described does not exist here. The table above is what this code
+actually does.
+
+AMBIGUITY TO RESOLVE: "peas" is ambiguous -- RP14 contains two pea ingredients
+("Peas frozen boiled" and "Peas garden super fine tinned"). Pick one convention
+and state it in the caption.
+
+
+================================================================================
+4. HYBRID MODEL FEATURE COUNT
+================================================================================
+
+Design matrix: Hybrid/src/hybrid_analysis.py:193-194
+               (identically at :291-292 for the Table S3 coefficients)
+chem_cols definition: Hybrid/src/hybrid_analysis.py:162-163
+
+NOTE: Lasso/src/hybrid_analysis.py is a byte-identical duplicate of
+      Hybrid/src/hybrid_analysis.py (verified via diff).
+
+    feat_hybrid = [f'{t}_hs_mid', f'{t}_voigt'] + chem_cols
+    X_hyb = df[feat_hybrid].values.astype(float)
+
+COLUMNS, IN ORDER (per taste t):
+   1.  {t}_hs_mid
+   2.  {t}_voigt
+   3.  protein_frac
+   4.  sugar_frac
+   5.  maillard_potential
+   6.  salt_frac
+   7.  water_frac
+   8.  conc_factor
+   9.  allium_frac
+  10.  fermented_frac
+
+ANSWERS
+-------
+Q: How many columns are actually in the design matrix?
+A: 10. (2 bound-derived + 8 chemistry proxies.) The code's own bookkeeping
+   agrees -- n_feat for 'Hybrid HS+chem' is hardcoded to 10 at
+   Hybrid/src/hybrid_analysis.py:274. So "K = 8 proxies" and "10 features" are
+   BOTH correct as stated in the manuscript.
+
+Q: Is the HS midpoint one of them (fitted with a coefficient), or subtracted
+   from the target as an offset before fitting?
+A: FITTED. It is column 1 of X, z-scored by StandardScaler
+   (Hybrid/src/hybrid_analysis.py:139 and :294) and assigned a Lasso
+   coefficient. It is never subtracted from y. The target y is
+   df[f'{t}_actual'] raw (:177).
+   >>> EQ. 4 AS DESCRIBED -- HS MIDPOINT AS A FIXED ADDITIVE OFFSET -- DOES NOT
+       MATCH THE CODE.
+
+Q: Do both the HS midpoint and the RV/Voigt bound appear, or only one?
+A: BOTH, as separate fitted columns. results/hybrid/table_s3_coefficients.csv
+   confirms both carry nonzero coefficients, e.g. for sour:
+       sour_voigt  +35.16
+       sour_hs_mid -27.42
+   A large opposing pair, consistent with the collinearity noted at
+   Hybrid/src/hybrid_analysis.py:325 (pooled HS-vs-Voigt correlation).
+
+Q: Does the model fit an intercept?
+A: YES. LassoCV(alphas=..., cv=5, max_iter=20000) at
+   Hybrid/src/hybrid_analysis.py:142 and :295. fit_intercept is left at its
+   default True. It is printed at :298.
+
+
+AGGREGATE METRICS ("Avg 4D" ROW)
+--------------------------------
+Computed over SWEET, SOUR, UMAMI, SALTY. BITTER IS EXCLUDED.
+  - Table 2:      `if t != 'bitter'` gate at Hybrid/src/hybrid_analysis.py:266-268
+  - Table 1 AVG:  filters r['Taste'] != 'Bitter' at :222-226
+
+Verified against results/hybrid/table2_models.csv:
+
+  Model                 Avg MAE     Avg PCC
+  HS midpoint          14.653330    0.598495
+  Voigt                11.929724    0.625815
+  Lasso 5D              7.276180    0.672765
+  Hybrid HS+chem        7.337491    0.665343   <-- rounds to 7.3 / 0.67  [MATCHES]
+  Lasso per-ingr        7.465735    0.643588
+
+CAVEAT: 'Lasso 5D' scores MAE 7.276 / PCC 0.673, which ALSO rounds to 7.3 / 0.67
+and is nominally the BETTER model on both metrics. Verify the manuscript
+attributes the row to the correct model.
+
+
+IS BITTERNESS ANYWHERE IN THE AGGREGATE?
+----------------------------------------
+No -- not in the Table 1 AVG, and not in the Table 2 averages.
+
+But bitter IS still computed and reported elsewhere:
+  - Its own Table 1 row (results/coverage/table1_coverage.csv):
+        Hyb MAE = 0.945518, Hyb PCC = 0.148061
+  - Its Table S3 coefficients (results/hybrid/table_s3_coefficients.csv,
+    8 rows: maillard_potential +0.65, bitter_voigt +0.32, allium_frac -0.27,
+    conc_factor +0.09, salt_frac -0.08, water_frac +0.06, protein_frac -0.05,
+    sugar_frac +0.02)
+  - The bitterness floor-effect block (Hybrid/src/hybrid_analysis.py:308-318)
+  - The pooled HS-vs-Voigt correlation at :323-324, which concatenates ALL FIVE
+    tastes including bitter.
+
+Full Table 1 (results/coverage/table1_coverage.csv):
+  Taste   GT Mean    GT SD    Below Within Above  HS MAE   HS PCC   HS Bias   Hyb MAE  Hyb PCC  Hyb Bias
+  Sweet   17.7429   17.5741    1%     6%    93%   12.9903  0.8331  -12.9703   7.5731   0.6985  -0.5000
+  Sour    11.4000   12.9277    0%    20%    80%    8.6102  0.6329   -8.5964   6.3374   0.7385   0.4095
+  Bitter   1.5714    1.3791   13%    61%    26%    0.9198  0.3075   -0.0426   0.9455   0.1481  -0.0226
+  Umami   15.0286   10.8641    3%     7%    90%   12.7708  0.5498  -12.7185   6.1393   0.6338  -0.0239
+  Salt    29.8143   14.5840    0%     3%    97%   24.2420  0.3783  -24.2420   9.3002   0.5906   0.0346
+
+
+================================================================================
+5. BITTERNESS IN THE DE OBJECTIVE
+================================================================================
+
+YES -- BITTERNESS IS SUMMED, WITH WEIGHT 1 IN ALL THREE CASES.
+
+Inverse/src/inverse_design.py:58-61
+
+    def objective(v):
+        vn = v / v.sum()
+        p = np.array([hs_mid(T_mat[:, j], vn) for j in range(5)])
+        return np.sum(W * np.abs(target - p) / np.maximum(np.abs(p), 0.01))
+
+range(5) covers all of TASTES, and W is applied elementwise over all five
+dimensions. Bitter is index 2, and W[2] == 1 at :105, :112, and :119.
+
+
+*** FLAG: CONTRADICTION WITH THE RESULTS TEXT ***
+
+Eq. 5 summing over five dimensions MATCHES the code. But the Results claim that
+bitterness is not a predictive target is CONTRADICTED by the optimizer, which
+actively constrains bitterness -- and the constraint BINDS:
+
+  RP68 bitter: 1.289151 -> 1.369593  (+0.080)
+
+That is the third-largest profile change in the ketchup case.
+
+Bitterness is therefore simultaneously:
+  (a) excluded from every reported accuracy metric (see item 4), and
+  (b) used as an optimization target with equal weight to sour and salt.
+
+This is a genuine inconsistency in the pipeline itself, not just the write-up.
+
+
+================================================================================
+SUMMARY OF FLAGS
+================================================================================
+
+ 1. Ketchup sugar cap is 0.10 in code, not 0.05.
+    -> Inverse/src/inverse_design.py:120
+
+ 2. Reported compositions VIOLATE their own bounds. Post-hoc renormalization at
+    Inverse/src/inverse_design.py:66 undoes differential_evolution's box
+    constraints. Ketchup sugar 0.1180 > 0.10; chocolate sugar 0.5096 > 0.35.
+    Four further violations listed in item 1.
+
+ 3. Chocolate "sugar reduction" has an EMPTY target_changes
+    (Inverse/src/inverse_design.py:111) -- no sugar-reduction term exists, and
+    reported sugar ROSE from 0.5035 to 0.5096. Neither 35% -> 36% nor any
+    reduction is what happened.
+
+ 4. No Table 4 dimension had zero weight -- all weights are >= 1 in all three
+    cases. The zero-weight explanation for the unchanged values is false.
+
+ 5. Ketchup's 29.8 is a PRE-optimization figure. It matches the corpus-wide mean
+    salt (29.8143) at one decimal better than RP68's own hybrid prediction
+    (29.882 -> 29.9). Favors a dataset-level leak; not conclusive between the
+    two, but pre-optimization either way.
+
+ 6. No code produces post-optimization taste predictions on the manuscript's
+    scale. The optimizer reports HS midpoints (range 0.6-23), not the 4-30
+    values printed in Table 4.
+
+ 7. Pea soup mass fractions do not match the manuscript at all -- oil DECREASES,
+    and no ingredient moves by +/-0.23. The described run does not exist in this
+    repo.
+
+ 8. Eq. 4 is wrong: the HS midpoint is a fitted, standardized coefficient, not an
+    additive offset. The model has 10 columns and fits an intercept.
+
+ 9. Bitterness is an active DE target with weight 1 in all three cases,
+    contradicting the Results text, while being excluded from all aggregate
+    metrics.
+
+10. Minor: 'Lasso 5D' (MAE 7.276 / PCC 0.673) also rounds to 7.3 / 0.67 and
+    outperforms the hybrid model on both metrics. Check the "Avg 4D" row
+    attribution.
+
+11. Minor: "peas" in the pea soup case is ambiguous -- RP14 has two pea
+    ingredients.
+
+================================================================================
+END OF REPORT
+================================================================================
